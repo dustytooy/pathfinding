@@ -1,44 +1,111 @@
+using System.Collections.Generic;
 using UnityEngine;
+
 namespace Pathfinding.Grid
 {
-    public class Grid
+    public class Grid : IGraph<Cell>
     {
         public int width { get; private set; }
         public int height { get; private set; }
-        public CellModel[] cells { get; private set; }
+        public Cell[] cells { get; private set; }
 
-        public Grid(int width, int height)
+        public Cell start { get ; set; }
+        public Cell end { get ; set ; }
+        public IOpenList<Cell> openList { get ; set ; }
+        public IClosedList<Cell> closedList { get; set; }
+
+        public Grid(int width, int height, Cell[] cells, Vector2 start, Vector2 end)
         {
             this.width = width;
             this.height = height;
+            this.cells = cells;
 
-            cells = new CellModel[width * height];
-            for (int y = 0; y < height; y++)
+            openList = new OpenList<Cell>();
+            closedList = new ClosedList<Cell>();
+
+            this.start = PositionToCell(start);
+            this.end = PositionToCell(end);
+
+            if(cells == null || cells.Length != width * height || start == null || end == null)
             {
-                for (int x = 0; x < width; x++)
-                {
-                    int index = y * width + x;
-                    cells[index] = new CellModel(new Vector2Int(x, y));
-                }
+                throw new System.ArgumentNullException("Grid constructor parameters");
             }
         }
 
-        public CellModel GetCell(int x, int y)
+        public Cell this[int x, int y]
         {
-            if(ValidatePosition(x, y))
+            get
             {
+                if(!IsValidPosition(x, y))
+                    return null;
                 return cells[y * width + x];
             }
-            return null;
+        }
+        public Cell this[int i]
+        {
+            get
+            {
+                if (i < 0 || i >= cells.Length)
+                    return null;
+                return cells[i];
+            }
         }
 
-        public bool ValidatePosition(int x, int y)
+        public bool IsValidPosition(int x, int y)
         {
             if(x < 0 || y < 0 || x >= width || y >= height)
             {
                 return false;
             }
             return true;
+        }
+
+        public Cell PositionToCell(Vector2 position)
+        {
+            int x = (int)(position.x / Cell.size);
+            int y = (int)(position.y / Cell.size);
+            return this[x,y];
+        }
+
+        public Vector2 CellToPosition(Cell cell)
+        {
+            return new Vector2(cell.position.x + 0.5f, cell.position.y + 0.5f) * Cell.size;
+        }
+
+        public Cell[] GetNeighbors(Cell cell)
+        {
+            var neighbors = new List<Cell>();
+
+            for (int i = -1; i <= 1; i++)
+            {
+                for (int j = -1; j <= 1; j++)
+                {
+                    if (i == 0 && j == 0)
+                        continue;
+                    int newX = cell.position.x + i;
+                    int newY = cell.position.y + j;
+                    var newCell = this[newX, newY];
+                    if (newCell != null && !newCell.isObstacle)
+                    {
+                        neighbors.Add(cell);
+                    }
+                }
+            }
+
+            return neighbors.ToArray();
+        }
+
+        public int CalculateGCost(Cell current, Cell parent)
+        {
+            return parent.gCost + Mathf.FloorToInt((parent.position - current.position).magnitude * 10f);
+        }
+
+        public int CalculateHCost(Cell current)
+        {
+            float dx = Mathf.Abs(current.position.x - current.position.x);
+            float dy = Mathf.Abs(current.position.y - current.position.y);
+
+            return Mathf.FloorToInt(Cell.size * (dx + dy + (Mathf.Sqrt(2f) - 2) * Mathf.Min(dx, dy)) * 10f);
         }
     }
 }

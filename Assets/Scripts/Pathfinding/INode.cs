@@ -1,18 +1,13 @@
-﻿using R3;
+﻿using System;
 
 namespace Pathfinding
 {
-    public enum TerrainType
+    public interface INode : IEquatable<INode>, IComparable<INode>
     {
-        Obstacle,
-        Traversable
-    }
-    public interface INode
-    {
-        public ReactiveProperty<TerrainType> type { get; set; }
-        public ReactiveProperty<int> gCost { get; set; }
-        public ReactiveProperty<int> hCost { get; set; }
+        public bool isObstacle { get; set; }
+        public int gCost { get; set; }
+        public int hCost { get; set; }
         public int fCost { get; }
-        public ReactiveProperty<INode> parent { get; set; }
+        public INode parent { get; set; }
     }
 }

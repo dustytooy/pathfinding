@@ -1,9 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
-using Pathfinding.Grid;
-using Pathfinding;
 
-public class CellUIView : MonoBehaviour, ICellView
+public class CellUI : MonoBehaviour
 {
     [SerializeField]
     private TMPro.TMP_Text text;
@@ -22,16 +20,8 @@ public class CellUIView : MonoBehaviour, ICellView
         h = value;
         text.text = $"{g}:{h}\n{g+h}";
     }
-    public void UpdateType(TerrainType type)
+    public void UpdateCellColor(bool isObstable)
     {
-        switch (type)
-        {
-            case TerrainType.Obstacle:
-                image.color = Color.black;
-                break;
-            case TerrainType.Traversable:
-                image.color = Color.white;
-                break;
-        }
+        image.color = isObstable ? Color.black : Color.white;
     }
 }

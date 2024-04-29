@@ -1,6 +1,5 @@
 using UnityEngine;
 using R3;
-using Pathfinding.Grid;
 
 public class MyGrid : MonoBehaviour
 {
@@ -13,47 +12,29 @@ public class MyGrid : MonoBehaviour
     [SerializeField]
     private bool display;
 
-    private Pathfinding.Grid.Grid grid;
-    private Vector2Int start, end;
-
-    private Mode mode;
-    private enum Mode
-    {
-        SelectStart,
-        SelectEnd,
-    }
+    private MyCell[] _grid;
 
     private void Start()
     {
-        canvas.sizeDelta = new Vector2(width, height) * CellModel.size;
-        canvas.position = transform.position + new Vector3(width * 0.5f, 0, height * 0.5f) * CellModel.size;
+        canvas.sizeDelta = new Vector2(width, height) * MyCell.size;
+        canvas.position = transform.position + new Vector3(width * 0.5f, 0, height * 0.5f) * MyCell.size;
         Camera.main.orthographicSize = height * 0.5f;
 
-        grid = new Pathfinding.Grid.Grid(width, height);
+        _grid = new MyCell[width * height];
 
         for (int y = 0; y < height; y++)
         {
             for (int x = 0; x < width; x++)
             {
-                Vector3 center = transform.position + new Vector3(x + 0.5f, 0, y + 0.5f) * CellModel.size;
+                Vector3 center = transform.position + new Vector3(x + 0.5f, 0, y + 0.5f) * MyCell.size;
                 var go = Instantiate(costPrefab, center, canvas.rotation, canvas);
                 go.name = $"{x}:{y}";
-                int index = y * width + x;
-                new CellViewModel(grid.cells[index], go.GetComponent<CellUIView>());
-            }
-        }
-    }
-
-    private void Update()
-    {
-        if (Input.GetMouseButtonDown(0))
-        {
-            Debug.Log("Mouse clicked");
-            if (mode == Mode.SelectStart)
-            {
-            }
-            else if(mode == Mode.SelectEnd)
-            {
+                int i = y * width + x;
+                var cell = _grid[i] = go.GetComponent<MyCell>();
+                var ui = go.GetComponent<CellUI>();
+                cell.gCost.Subscribe(ui.UpdateGCost);
+                cell.hCost.Subscribe(ui.UpdateHCost);
+                cell.isObstacle.Subscribe(ui.UpdateCellColor);
             }
         }
     }
@@ -66,16 +47,9 @@ public class MyGrid : MonoBehaviour
         {
             for(int x = 0; x < width; x++)
             {
-                Vector3 center = transform.position + new Vector3(x + 0.5f, 0, y + 0.5f) * CellModel.size;
-                Gizmos.DrawWireCube(center, Vector3.one * CellModel.size);
+                Vector3 center = transform.position + new Vector3(x + 0.5f, 0, y + 0.5f) * MyCell.size;
+                Gizmos.DrawWireCube(center, Vector3.one * MyCell.size);
             }
         }
-
-        Gizmos.color = Color.red;
-        Vector3 s = transform.position + new Vector3(start.x + 0.5f, 0, start.y + 0.5f) * CellModel.size;
-        Gizmos.DrawWireCube(s, Vector3.one * CellModel.size);
-        Vector3 e = transform.position + new Vector3(end.x + 0.5f, 0, end.y + 0.5f) * CellModel.size;
-        Gizmos.DrawWireCube(e, Vector3.one * CellModel.size);
-
     }
 }
