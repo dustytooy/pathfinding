@@ -1,27 +1,66 @@
+using System;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
+using UniRx;
 
 public class CellUI : MonoBehaviour
 {
     [SerializeField]
-    private TMPro.TMP_Text text;
+    private Button button;
+    [SerializeField]
+    private TMPro.TMP_Text gCost;
+    [SerializeField]
+    private TMPro.TMP_Text hCost;
+    [SerializeField]
+    private TMPro.TMP_Text fCost;
     [SerializeField]
     private Image image;
-    private int g, h;
 
+    private static readonly Dictionary<MyCell.State, Color> stateColors = new Dictionary<MyCell.State, Color>()
+    {
+        { MyCell.State.None, Color.white },
+        { MyCell.State.OpenList, Color.yellow },
+        { MyCell.State.ClosedList, Color.green },
+        { MyCell.State.Start, Color.blue },
+        { MyCell.State.End, Color.red },
+        { MyCell.State.Path, Color.cyan },
+    };
+    private static readonly Dictionary<MyCell.Terrain, Color> terrainColors = new Dictionary<MyCell.Terrain, Color>()
+    {
+        { MyCell.Terrain.None, Color.white },
+        { MyCell.Terrain.Obstacle, Color.black },
+    };
 
-    public void UpdateGCost(int value)
+    public void UpdateCost(Vector2Int cost)
     {
-        g = value;
-        text.text = $"{g}:{h}\n{g+h}";
+        if(cost.x == -1 || cost.y == -1)
+        {
+            gCost.text = "";
+            hCost.text = "";
+            fCost.text = "";
+        }
+        else
+        {
+            gCost.text = cost.x.ToString();
+            hCost.text = cost.y.ToString();
+            fCost.text = (cost.x + cost.y).ToString();
+        }
     }
-    public void UpdateHCost(int value)
+
+    public void UpdateColor(MyCell.State state)
     {
-        h = value;
-        text.text = $"{g}:{h}\n{g+h}";
+        image.color = stateColors[state];
     }
-    public void UpdateCellColor(bool isObstable)
+    public void UpdateColor(MyCell.Terrain terrain)
     {
-        image.color = isObstable ? Color.black : Color.white;
+        image.color = terrainColors[terrain];
+    }
+    public void OnClick(Action action)
+    {
+        button.OnClickAsObservable().Subscribe(_ =>
+        {
+            action.Invoke();
+        });
     }
 }

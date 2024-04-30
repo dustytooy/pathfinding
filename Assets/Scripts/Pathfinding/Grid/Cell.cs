@@ -17,8 +17,8 @@ namespace Pathfinding.Grid
         {
             this.position = position;
             this.isObstacle = isObstacle;
-            gCost = int.MaxValue;
-            hCost = 0;
+            gCost = 0;
+            hCost = int.MaxValue;
             parent = null;
         }
 

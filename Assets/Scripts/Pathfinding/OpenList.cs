@@ -77,13 +77,6 @@ namespace Pathfinding
         }
         private void MinHeapify(int index)
         {
-            while (index != 0 && 
-                nodes[index].CompareTo(nodes[Parent(index)]) <= 0)
-            {
-                Swap(index, Parent(index));
-                index = Parent(index);
-            }
-
             int l = Left(index);
             int r = Right(index);
 
