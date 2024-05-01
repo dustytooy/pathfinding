@@ -61,8 +61,6 @@ namespace Pathfinding.Grid
             return this[x,y];
         }
 
-
-
         public Vector2 CellToPosition(Cell cell)
         {
             return new Vector2(cell.position.x + 0.5f, cell.position.y + 0.5f) * Cell.size;

@@ -136,7 +136,7 @@ public class GridPathfinder : MonoBehaviour
             start,
             end,
             out path,
-            100,
+            grid.width * grid.height / 2,
             (x) =>
             {
                 var c = x as Cell;

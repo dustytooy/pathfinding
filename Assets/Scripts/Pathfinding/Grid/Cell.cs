@@ -87,10 +87,6 @@ namespace Pathfinding.Grid
             {
                 trace.Add(cell);
                 cell = cell.parent;
-                if (trace.Count > 10)
-                {
-                    Debug.LogError("Traceback fail");
-                }
             }
             trace.Reverse();
             return trace.ToArray();

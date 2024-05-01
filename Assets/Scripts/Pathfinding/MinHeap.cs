@@ -58,8 +58,8 @@ namespace Pathfinding
 
             var result = _elements[0];
             _elements[0] = _elements[_size - 1];
+            _elements.RemoveAt(_size - 1);
             _size--;
-
             ReCalculateDown();
 
             return result;
@@ -80,36 +80,27 @@ namespace Pathfinding
         {
             if (_size == 0)
                 return false;
-
+            //return _elements.Contains(element);
             if (_elements[subtreeIndex].Equals(element))
             {
                 return true;
             }
-            var leftContains = false;
-            if (HasLeftChild(subtreeIndex))
+
+            // Check left
+            if (HasLeftChild(subtreeIndex) && GetLeftChild(subtreeIndex).CompareTo(element) <= 0)
             {
-                var left = GetLeftChild(subtreeIndex);
-                if (left.CompareTo(element) > 0)
+                if(Contains(element, GetLeftChildIndex(subtreeIndex)))
                 {
-                    leftContains = Contains(element, GetLeftChildIndex(subtreeIndex));
+                    return true;
                 }
             }
-            if (leftContains)
+            // Check right
+            if (HasRightChild(subtreeIndex) && GetRightChild(subtreeIndex).CompareTo(element) <= 0)
             {
-                return true;
-            }
-            var rightContains = false;
-            if (HasRightChild(subtreeIndex))
-            {
-                var right = GetRightChild(subtreeIndex);
-                if (right.CompareTo(element) > 0)
+                if (Contains(element, GetRightChildIndex(subtreeIndex)))
                 {
-                    rightContains = Contains(element, GetRightChildIndex(subtreeIndex));
+                    return true;
                 }
-            }
-            if (rightContains)
-            {
-                return true;
             }
             return false;
         }
