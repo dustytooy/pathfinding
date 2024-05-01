@@ -7,53 +7,55 @@ namespace Pathfinding
         public enum Status
         {
             PathFound,
-            Pathfinding,
             PathNotFound,
         }
-        public static (Status, TNode[]) ResolvePath<TNode>(
-            IGraph<TNode> graph, 
-            Action<TNode> addToOpenListCallback = null,
-            Action<TNode> addToClosedListCallback = null) where TNode : INode
+        public static Status RequestPath(
+            INode start, 
+            INode end, 
+            out INode[] path, 
+            int heapCapacity,
+            Action<INode> addToOpenListCallback = null,
+            Action<INode> addToClosedListCallback = null)
         {
-            graph.openList.Push(graph.start);
+            var openList = new MinHeap(heapCapacity);
+            var closedList = new MinHeap(heapCapacity);
 
-            while (!graph.openList.Empty)
+            openList.Add(start);
+            while (!openList.IsEmpty())
             {
-                var q = graph.openList.Pop();
-                var neighbors = graph.GetNeighbors(q);
+                var cur = openList.Pop();
+                var neighbors = cur.GetNeighbors();
 
-                foreach(var n in neighbors)
+                foreach (var n in neighbors)
                 {
-                    if(graph.IsEnd(n))
+                    if (n.Equals(end))
                     {
-                        n.parent = q;
-                        graph.final = n;
-                        return (Status.PathFound, graph.TraceBack());
+                        n.parent = cur;
+                        path = n.Traceback();
+                        return Status.PathFound;
                     }
-                    if (!graph.closedList.Contains(n))
+                    if (!closedList. Contains(n))
                     {
-                        int gNew = graph.CalculateGCost(n, q);
-                        int hNew = graph.CalculateHCost(n);
+                        int gNew = n.CalculateGCost(cur);
+                        int hNew = n.CalculateHCost();
                         int fNew = gNew + hNew;
 
-                        if (!graph.openList.Contains(n) || n.fCost > fNew)
+                        if (!openList.Contains(n) || n.fCost > fNew)
                         {
                             n.gCost = gNew;
                             n.hCost = hNew;
-                            n.parent = q;
-                            graph.openList.Push(n);
+                            n.parent = cur;
+                            openList.Add(n);
                             addToOpenListCallback?.Invoke(n);
                         }
                     }
                 }
 
-                graph.closedList.Add(q);
-                addToClosedListCallback?.Invoke(q);
+                closedList.Add(cur);
+                addToClosedListCallback?.Invoke(cur);
             }
-            graph.final = graph.closedList.Min();
-            return (Status.PathNotFound, graph.TraceBack());
+            path = closedList.Peek().Traceback();
+            return Status.PathNotFound;
         }
-
-
     }
 }

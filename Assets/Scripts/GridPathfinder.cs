@@ -2,6 +2,8 @@ using System;
 using UnityEngine;
 using Pathfinding;
 using UniRx;
+using Pathfinding.Grid;
+using Grid = Pathfinding.Grid.Grid;
 
 public class GridPathfinder : MonoBehaviour
 {
@@ -29,7 +31,7 @@ public class GridPathfinder : MonoBehaviour
     private ReactiveProperty<int> _clickCount;
     private Vector3[] _path = null;
 
-    private Pathfinding.Grid.Grid _pathGrid;
+    private Grid _pathGrid;
 
     private void Awake()
     {
@@ -45,6 +47,8 @@ public class GridPathfinder : MonoBehaviour
 
     public void Initialize()
     {
+        _pathGrid = new Grid();
+
         phase = new ReactiveProperty<Phase>(Phase.Staging);
         clickedCell = new ReactiveProperty<MyCell>();
         _clickCount = new ReactiveProperty<int>(0);
@@ -113,24 +117,41 @@ public class GridPathfinder : MonoBehaviour
     public void Pathfinding()
     {
         Debug.Log("Finding path...");
-        int[] obstacles = Array.ConvertAll(grid.cells, x => { return x.terrain.Value == MyCell.Terrain.Obstacle ? 1 : 0; });
 
-        _pathGrid = new Pathfinding.Grid.Grid(grid.width, grid.height, obstacles, _start.position, _end.position);
+        Cell[] cells = Array.ConvertAll(grid.cells, x => 
+        {
+            return new Cell(
+                Cell.PositionToInt(x.position), 
+                x.terrain.Value == MyCell.Terrain.Obstacle, 
+                _pathGrid,
+                Cell.PositionToInt(_end.position));
+        });
+        _pathGrid.Initialize(grid.width, grid.height, cells, _end.position);
 
-        var (status, path) = RequestPathManager.ResolvePath(_pathGrid,
-            (Pathfinding.Grid.Cell x) =>
+
+        INode start = _pathGrid.PositionToCell(_start.position);
+        INode end = _pathGrid.PositionToCell(_end.position);
+        INode[] path;
+        var status = RequestPathManager.RequestPath(
+            start,
+            end,
+            out path,
+            100,
+            (x) =>
             {
-                int i = x.position.y * grid.width + x.position.x;
+                var c = x as Cell;
+                int i = c.position.y * grid.width + c.position.x;
                 var cell = grid.cells[i];
                 cell.gCost.Value = x.gCost;
                 cell.hCost.Value = x.hCost;
                 cell.state.Value = MyCell.State.OpenList;
             },
-            (Pathfinding.Grid.Cell x) =>
+            (x) =>
             {
-                int i = x.position.y * grid.width + x.position.x;
+                var c = x as Cell;
+                int i = c.position.y * grid.width + c.position.x;
                 var cell = grid.cells[i];
-                if (_pathGrid.IsStart(x))
+                if (start.Equals(x))
                 {
                     cell.state.Value = MyCell.State.Start;
                 }
@@ -142,14 +163,15 @@ public class GridPathfinder : MonoBehaviour
 
         _path = Array.ConvertAll(path, x =>
         {
-            int i = x.position.y * grid.width + x.position.x;
+            var c = x as Cell;
+            int i = c.position.y * grid.width + c.position.x;
             var cell = grid.cells[i];
-            if (!_pathGrid.IsStart(x) && !_pathGrid.IsEnd(x))
+            if (!start.Equals(x) && !end.Equals(x))
             {
                 cell.state.Value = MyCell.State.Path;
             }
 
-            var v = _pathGrid.CellToPosition(x);
+            var v = _pathGrid.CellToPosition(c);
             return grid.transform.position + new Vector3(v.x, 1f, v.y);
         });
 
@@ -189,11 +211,18 @@ public class GridPathfinder : MonoBehaviour
 
     private void Clean()
     {
-        _pathGrid = null;
         _path = null;
         _start = null;
         _end = null;
         Debug.Log("Cleaned references");
+    }
+
+    private void OnDestroy()
+    {
+        _pathGrid = null;
+        _path = null;
+        _start = null;
+        _end = null;
     }
 
     private void OnDrawGizmos()
