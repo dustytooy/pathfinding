@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace Pathfinding.Grid
+namespace Dustytoy.Pathfinding.Grid
 {
     public class Cell : INode
     {

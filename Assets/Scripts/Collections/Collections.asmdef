@@ -1,9 +1,7 @@
 {
-    "name": "Pathfinding",
-    "rootNamespace": "Dustytoy.Pathfinding",
-    "references": [
-        "GUID:30a647d378700314bbb121b469c3a051"
-    ],
+    "name": "Collections",
+    "rootNamespace": "Dustytoy.Collections",
+    "references": [],
     "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,

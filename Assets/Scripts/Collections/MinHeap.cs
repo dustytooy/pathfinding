@@ -2,18 +2,23 @@
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 
-namespace Dustytoy.Pathfinding
+namespace Dustytoy.Collections
 {
     // From https://egorikas.com/max-and-min-heap-implementation-with-csharp/
-    internal class MinHeapsa
+    public class MinHeap<T> where T : IComparable<T>
     {
-        //private readonly INode[] _elements;
-        private readonly List<INode> _elements;
+        public static readonly int DefaultInitialCapacity = 10;
+        //private readonly T[] _elements;
+        private readonly List<T> _elements;
         private int _size;
 
-        public MinHeapsa(int size = 10)
+        public MinHeap()
         {
-            _elements = new List<INode>(size);
+            _elements = new List<T>(DefaultInitialCapacity);
+        }
+        public MinHeap(int initialCapacity)
+        {
+            _elements = new List<T>(initialCapacity);
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private int GetLeftChildIndex(int elementIndex) => 2 * elementIndex + 1;
@@ -27,9 +32,9 @@ namespace Dustytoy.Pathfinding
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private bool IsRoot(int elementIndex) => elementIndex == 0;
 
-        private INode GetLeftChild(int elementIndex) => _elements[GetLeftChildIndex(elementIndex)];
-        private INode GetRightChild(int elementIndex) => _elements[GetRightChildIndex(elementIndex)];
-        private INode GetParent(int elementIndex) => _elements[GetParentIndex(elementIndex)];
+        private T GetLeftChild(int elementIndex) => _elements[GetLeftChildIndex(elementIndex)];
+        private T GetRightChild(int elementIndex) => _elements[GetRightChildIndex(elementIndex)];
+        private T GetParent(int elementIndex) => _elements[GetParentIndex(elementIndex)];
 
         private void Swap(int firstIndex, int secondIndex)
         {
@@ -43,7 +48,15 @@ namespace Dustytoy.Pathfinding
             return _size == 0;
         }
 
-        public INode Peek()
+        public void Clear(int setCapacity)
+        {
+            _size = 0;
+            _elements.Clear();
+            _elements.Capacity = setCapacity;
+        }
+        public void Clear() => Clear(DefaultInitialCapacity);
+
+        public T Peek()
         {
             if (_size == 0)
                 throw new IndexOutOfRangeException();
@@ -51,7 +64,7 @@ namespace Dustytoy.Pathfinding
             return _elements[0];
         }
 
-        public INode Pop()
+        public T Pop()
         {
             if (_size == 0)
                 throw new IndexOutOfRangeException();
@@ -65,7 +78,7 @@ namespace Dustytoy.Pathfinding
             return result;
         }
 
-        public void Add(INode element)
+        public void Add(T element)
         {
             //if (_size == _elements.Count)
             //    throw new IndexOutOfRangeException();
@@ -76,7 +89,7 @@ namespace Dustytoy.Pathfinding
             ReCalculateUp();
         }
 
-        public bool Contains(INode element, int subtreeIndex = 0)
+        public bool Contains(T element, int subtreeIndex = 0)
         {
             if (_size == 0)
                 return false;

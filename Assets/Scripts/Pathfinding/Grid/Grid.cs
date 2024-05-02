@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace Pathfinding.Grid
+namespace Dustytoy.Pathfinding.Grid
 {
     public class Grid
     {

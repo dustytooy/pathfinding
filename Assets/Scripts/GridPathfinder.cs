@@ -1,9 +1,9 @@
 using System;
 using UnityEngine;
-using Pathfinding;
 using UniRx;
-using Pathfinding.Grid;
-using Grid = Pathfinding.Grid.Grid;
+using Dustytoy.Pathfinding;
+using Dustytoy.Pathfinding.Grid;
+using Grid = Dustytoy.Pathfinding.Grid.Grid;
 
 public class GridPathfinder : MonoBehaviour
 {
@@ -132,7 +132,79 @@ public class GridPathfinder : MonoBehaviour
         INode start = _pathGrid.PositionToCell(_start.position);
         INode end = _pathGrid.PositionToCell(_end.position);
         INode[] path;
-        var status = RequestPathManager.RequestPath(
+
+
+        //var cancellationToken = new CancellationTokenSource();
+        //var waitForKeyDown = Observable.EveryUpdate()
+        //    .Where(_ => Input.GetKeyDown(KeyCode.Space)).ToYieldInstruction();
+        //var pathfindingStream = Observable.FromCoroutineValue<Request.PerStepData>(_ => RequestPathManager.Single(
+        //    start,
+        //    end,
+        //    waitForKeyDown,
+        //    cancellationToken.Token))
+        //    .Subscribe(data =>
+        //    {
+        //        var status = data.status;
+        //        Debug.Log($"Status: {status}");
+        //        foreach(var node in data.addedToOpenList)
+        //        {
+        //            var open = node as Cell;
+        //            int i = open.position.y * grid.width + open.position.x;
+        //            var cell = grid.cells[i];
+        //            cell.gCost.Value = node.gCost;
+        //            cell.hCost.Value = node.hCost;
+        //            cell.state.Value = MyCell.State.OpenList;
+        //            Debug.Log($"Added {open.position} to open list");
+        //        }
+        //        {
+        //            var closed = data.addedToClosedListOrGoal as Cell;
+        //            int i = closed.position.y * grid.width + closed.position.x;
+        //            var cell = grid.cells[i];
+        //            if (start.Equals(closed))
+        //            {
+        //                cell.state.Value = MyCell.State.Start;
+        //            }
+        //            else
+        //            {
+        //                cell.state.Value = MyCell.State.ClosedList;
+        //            }
+        //            Debug.Log($"Added {closed.position} to {(data.status == Request.Status.InProgress ? "closed list" : "final")}");
+        //        }
+        //        if (status != Request.Status.InProgress)
+        //        {
+        //            path = null;
+        //            _path = Array.ConvertAll(path, x =>
+        //            {
+        //                var c = x as Cell;
+        //                int i = c.position.y * grid.width + c.position.x;
+        //                var cell = grid.cells[i];
+        //                if (!start.Equals(x) && !end.Equals(x))
+        //                {
+        //                    cell.state.Value = MyCell.State.Path;
+        //                }
+
+        //                var v = _pathGrid.CellToPosition(c);
+        //                return grid.transform.position + new Vector3(v.x, 1f, v.y);
+        //            });
+
+        //            if (status == Request.Status.PathFound)
+        //            {
+        //                Debug.Log("Found path...");
+        //            }
+        //            else if (status == Request.Status.PathNotFound)
+        //            {
+        //                Debug.Log("Found no path...");
+        //            }
+        //        }
+        //    }).AddTo(this);
+
+        //var endKeyDown = Observable.EveryUpdate()
+        //    .Where(_ => Input.GetKeyDown(KeyCode.Escape)).Subscribe(_=>
+        //    {
+        //        pathfindingStream.Dispose();
+        //    });
+
+        var status = RequestPathManager.RequestPathSimple(
             start,
             end,
             out path,
@@ -175,11 +247,11 @@ public class GridPathfinder : MonoBehaviour
             return grid.transform.position + new Vector3(v.x, 1f, v.y);
         });
 
-        if (status == RequestPathManager.Status.PathFound)
+        if (status == Request.Status.PathFound)
         {
             Debug.Log("Found path...");
         }
-        else if (status == RequestPathManager.Status.PathNotFound)
+        else if (status == Request.Status.PathNotFound)
         {
             Debug.Log("Found no path...");
         }

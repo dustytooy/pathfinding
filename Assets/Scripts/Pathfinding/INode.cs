@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace Pathfinding
+namespace Dustytoy.Pathfinding
 {
     public interface INode : IEquatable<INode>, IComparable<INode>
     {
