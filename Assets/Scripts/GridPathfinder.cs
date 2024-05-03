@@ -103,13 +103,11 @@ public class GridPathfinder : MonoBehaviour
                         }
                         _start = cell;
                         _start.state.Value = MyCell.State.Start;
-                        Debug.Log($"Modified _start ({_start})");
                     }
                     else if(click == 0) // Second click for end
                     {
                         _end = cell;
                         _end.state.Value = MyCell.State.End;
-                        Debug.Log($"Modified _end ({_end})");
                     }
                 }
             });
@@ -134,66 +132,86 @@ public class GridPathfinder : MonoBehaviour
         INode end = _pathGrid.PositionToCell(_end.position);
         INode[] path;
 
-        var handle = PathfindingManager.Request(start, end);
-        var request = handle.value;
-        Action<INode> addToOpenListCallback = (x) =>
+        var (handle, request) = PathfindingManager.Request(start, end);
+
+        Action<Request.StreamData> processStreamData = (x) =>
         {
-            var c = x as Cell;
+            var c = x.node as Cell;
             int i = c.position.y * grid.width + c.position.x;
             var cell = grid.cells[i];
-            cell.gCost.Value = x.gCost;
-            cell.hCost.Value = x.hCost;
-            cell.state.Value = MyCell.State.OpenList;
-        };
-        Action<INode> addToClosedListCallback = (x) =>
-        {
-            var c = x as Cell;
-            int i = c.position.y * grid.width + c.position.x;
-            var cell = grid.cells[i];
-            if (start.Equals(x))
+
+            if (x.action == Request.NodeAction.AddToOpenList)
             {
-                cell.state.Value = MyCell.State.Start;
+                cell.gCost.Value = c.gCost;
+                cell.hCost.Value = c.hCost;
+                cell.state.Value = MyCell.State.OpenList;
+                Debug.Log($"Added {(x.node as Cell).position.ToString()} to Open List");
             }
-            else
+            else if (x.action == Request.NodeAction.AddToClosedList)
             {
                 cell.state.Value = MyCell.State.ClosedList;
+                Debug.Log($"Added {(x.node as Cell).position.ToString()} to Closed List");
+            }
+            else if (x.action == Request.NodeAction.Start)
+            {
+                cell.state.Value = MyCell.State.Start;
+                Debug.Log($"Start from {(x.node as Cell).position.ToString()}");
+            }
+            else if (x.action == Request.NodeAction.End)
+            {
+                cell.state.Value = MyCell.State.End;
+                Debug.Log($"End at {(x.node as Cell).position.ToString()}");
             }
         };
-        Observable.FromCoroutine(_ => request.ProcessCoroutine(
-                addToOpenListCallback, 
-                addToClosedListCallback,
-                Observable.Timer(TimeSpan.FromSeconds(3)).ToYieldInstruction()))
-            .Subscribe(_ =>
+
+        Action writePath = () =>
+        {
+            path = request.result;
+            var status = request.pathfindingStatus;
+            _path = Array.ConvertAll(path, x =>
             {
-                if (request.isDone && request.error != null)
+                var c = x as Cell;
+                int i = c.position.y * grid.width + c.position.x;
+                var cell = grid.cells[i];
+
+                if (!start.Equals(x) && !end.Equals(x))
                 {
-                    path = request.result;
-                    var status = request.pathfindingStatus;
-                    _path = Array.ConvertAll(path, x =>
-                    {
-                        var c = x as Cell;
-                        int i = c.position.y * grid.width + c.position.x;
-                        var cell = grid.cells[i];
-                        if (!start.Equals(x) && !end.Equals(x))
-                        {
-                            cell.state.Value = MyCell.State.Path;
-                        }
 
-                        var v = _pathGrid.CellToPosition(c);
-                        return grid.transform.position + new Vector3(v.x, 1f, v.y);
-                    });
-
-                    if (status == Request.PathfindingStatus.PathFound)
-                    {
-                        Debug.Log("Found path...");
-                    }
-                    else if (status == Request.PathfindingStatus.PathNotFound)
-                    {
-                        Debug.Log("Found no path...");
-                    }
-
-                    handle.Release();
+                    cell.state.Value = MyCell.State.Path;
                 }
+
+                var v = _pathGrid.CellToPosition(c);
+                return grid.transform.position + new Vector3(v.x, 1f, v.y);
+            });
+
+            if (status == Request.PathfindingStatus.PathFound)
+            {
+                Debug.Log("Found path...");
+            }
+            else if (status == Request.PathfindingStatus.PathNotFound)
+            {
+                Debug.Log("Found no path...");
+            }
+        };
+
+        var interval = Observable.Interval(TimeSpan.FromSeconds(0.5))
+            .Where(_ => !request.isDone)
+            .AsUnitObservable();
+        var disposable = request.ProcessStreamWaitable(
+            interval,
+            data =>
+            {
+                processStreamData(data);
+            },
+            (e) =>
+            {
+                Debug.LogError(e);
+                handle.Release();
+            },
+            () =>
+            {
+                writePath();
+                handle.Release();
             });
     }
 
@@ -217,7 +235,6 @@ public class GridPathfinder : MonoBehaviour
                 phase.Value = Phase.Select;
                 break;
         }
-        Debug.Log($"Phase ({phase.Value})");
         return phase.Value;
     }
 
@@ -226,7 +243,6 @@ public class GridPathfinder : MonoBehaviour
         _path = null;
         _start = null;
         _end = null;
-        Debug.Log("Cleaned references");
     }
 
     private void OnDestroy()

@@ -1,6 +1,3 @@
-using System;
-using System.Collections;
-using System.Collections.Generic;
 using System.Threading;
 using Dustytoy.Collections;
 
@@ -26,11 +23,12 @@ namespace Dustytoy.Pathfinding
             Initialized = false;
         }
 
-        public static ObjectPoolHandle<Request> Request(INode start, INode end, CancellationToken cancellationToken = default)
+        public static (ObjectPoolHandle<Request>,Request) Request(INode start, INode end, CancellationToken cancellationToken = default)
         {
-            var request = requestPool.Acquire(x=>x.Clean());
-            request.value.Initialize(start, end, cancellationToken);
-            return request;
+            var request = requestPool.Acquire(
+                x=>x.Initialize(start, end, cancellationToken), 
+                x=>x.Clean());
+            return (request, request.value);
         }
     }
 }

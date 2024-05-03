@@ -2,7 +2,8 @@
     "name": "Pathfinding",
     "rootNamespace": "Dustytoy.Pathfinding",
     "references": [
-        "GUID:30a647d378700314bbb121b469c3a051"
+        "GUID:30a647d378700314bbb121b469c3a051",
+        "GUID:560b04d1a97f54a4e82edc0cbbb69285"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

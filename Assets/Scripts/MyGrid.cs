@@ -91,7 +91,6 @@ public class MyGrid : MonoBehaviour
                 cell.terrain.Value = MyCell.Terrain.None;
             }
         }
-        Debug.Log($"Cleaned cost{(keepTerrain ? " and terrain" : "")}");
     }
 
     private void OnDrawGizmos()

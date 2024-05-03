@@ -36,16 +36,18 @@ namespace Dustytoy.Collections
             elements = new List<T>(initialCapacity);
         }
 
-        public ObjectPoolHandle<T> Acquire(Action<T> onReleased = null)
+        public ObjectPoolHandle<T> Acquire(Action<T> onAcquired = null, Action<T> onReleased = null)
         {
             int count = elements.Count;
             if (count == 0)
             {
                 T newValue = new T();
+                onAcquired?.Invoke(newValue);
                 return new ObjectPoolHandle<T>(newValue, this, onReleased);
             }
             T pooledValue = elements[count - 1];
             elements.RemoveAt(count - 1);
+            onAcquired?.Invoke(pooledValue);
             return new ObjectPoolHandle<T>(pooledValue, this, onReleased);
         }
         internal void Release(T element)

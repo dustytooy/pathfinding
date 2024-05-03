@@ -1,7 +1,7 @@
 ﻿using System;
-using System.Collections;
 using System.Threading;
 using Dustytoy.Collections;
+using UniRx;
 
 namespace Dustytoy.Pathfinding
 {
@@ -72,15 +72,13 @@ namespace Dustytoy.Pathfinding
             closedList = null;
         }
 
-        public PathfindingStatus Process(
-            Action<INode> addToOpenListCallback = null,
-            Action<INode> addToClosedListCallback = null)
+        public void Process()
         {
             pathfindingStatus = PathfindingStatus.InProgress;
             openList = openListHandle.value;
             closedList = closedListHandle.value;
-            openList.Add(start);
 
+            openList.Add(start);
             while (!openList.IsEmpty() && !token.IsCancellationRequested)
             {
                 var cur = openList.Pop();
@@ -92,8 +90,8 @@ namespace Dustytoy.Pathfinding
                     {
                         n.parent = cur;
                         result = n.Traceback();
+                        pathfindingStatus = PathfindingStatus.PathFound;
                         isDone = true;
-                        return PathfindingStatus.PathFound;
                     }
                     if (!closedList.Contains(n))
                     {
@@ -107,80 +105,177 @@ namespace Dustytoy.Pathfinding
                             n.hCost = hNew;
                             n.parent = cur;
                             openList.Add(n);
-                            addToOpenListCallback?.Invoke(n);
                         }
                     }
                 }
 
                 closedList.Add(cur);
-                addToClosedListCallback?.Invoke(cur);
             }
 
             if (!token.IsCancellationRequested)
             {
                 error = new OperationCanceledException(token);
+                pathfindingStatus = PathfindingStatus.PathNotFound;
                 isDone = true;
-                return PathfindingStatus.PathNotFound;
             }
             result = closedList.Peek().Traceback();
+            pathfindingStatus = PathfindingStatus.PathNotFound;
             isDone = true;
-            return PathfindingStatus.PathNotFound;
         }
 
-        public IEnumerator ProcessCoroutine(
-            Action<INode> addToOpenListCallback = null,
-            Action<INode> addToClosedListCallback = null,
-            IEnumerator waitYieldInstruction = null)
+        public enum NodeAction : int
+        {
+            Start,
+            End,
+            AddToOpenList,
+            AddToClosedList,
+        }
+
+        public struct StreamData
+        {
+            public NodeAction action;
+            public INode node;
+            public StreamData(NodeAction action, INode node)
+            {
+                this.action = action;
+                this.node = node;
+            }
+        }
+
+        public IDisposable ProcessStream(Action<StreamData> onNext = null, Action<Exception> onError = null, Action onComplete = null)
+        {
+            return Observable.Create<StreamData> (observer =>
+            {
+                pathfindingStatus = PathfindingStatus.InProgress;
+                openList = openListHandle.value;
+                closedList = closedListHandle.value;
+
+                openList.Add(start);
+                observer.OnNext(new StreamData(NodeAction.Start, start));
+                while (!openList.IsEmpty() && !token.IsCancellationRequested)
+                {
+                    var cur = openList.Pop();
+                    var neighbors = cur.GetNeighbors();
+
+                    foreach (var n in neighbors)
+                    {
+                        if (n.Equals(end))
+                        {
+                            n.parent = cur;
+                            result = n.Traceback();
+                            pathfindingStatus = PathfindingStatus.PathFound;
+                            isDone = true;
+                            observer.OnNext(new StreamData(NodeAction.End, n));
+                            observer.OnCompleted();
+                            return Disposable.Empty;
+                        }
+                        if (!closedList.Contains(n))
+                        {
+                            int gNew = n.CalculateGCost(cur);
+                            int hNew = n.CalculateHCost();
+                            int fNew = gNew + hNew;
+
+                            if (!openList.Contains(n) || n.fCost > fNew)
+                            {
+                                n.gCost = gNew;
+                                n.hCost = hNew;
+                                n.parent = cur;
+                                openList.Add(n);
+                                observer.OnNext(new StreamData(NodeAction.AddToOpenList, n));
+                            }
+                        }
+                    }
+
+                    closedList.Add(cur);
+                    observer.OnNext(new StreamData(NodeAction.AddToClosedList, cur));
+                }
+
+                if (!token.IsCancellationRequested)
+                {
+                    error = new OperationCanceledException(token);
+                    pathfindingStatus = PathfindingStatus.PathNotFound;
+                    isDone = true;
+                    observer.OnError(error);
+                    return Disposable.Empty;
+                }
+                result = closedList.Peek().Traceback();
+                pathfindingStatus = PathfindingStatus.PathNotFound;
+                isDone = true;
+                observer.OnCompleted();
+                return Disposable.Empty;
+            }).Subscribe(onNext, onError, onComplete);
+        }
+
+        public IDisposable ProcessStreamWaitable(IObservable<Unit> waitSource, Action<StreamData> onNext = null, Action<Exception> onError = null, Action onComplete = null)
         {
             pathfindingStatus = PathfindingStatus.InProgress;
             openList = openListHandle.value;
             closedList = closedListHandle.value;
-            openList.Add(start);
-
-            while (!openList.IsEmpty() && !token.IsCancellationRequested)
+            bool addedStartNode = false;
+            Action<Unit> onWaitStream = _ =>
             {
-                var cur = openList.Pop();
-                var neighbors = cur.GetNeighbors();
-
-                foreach (var n in neighbors)
+                if (!addedStartNode)
                 {
-                    if (n.Equals(end))
+                    openList.Add(start);
+                    addedStartNode = true;
+                    onNext(new StreamData(NodeAction.Start, start));
+                }
+                else
+                {
+                    if (!openList.IsEmpty() && !token.IsCancellationRequested)
                     {
-                        n.parent = cur;
-                        result = n.Traceback();
-                        isDone = true;
-                        yield break;
-                    }
-                    if (!closedList.Contains(n))
-                    {
-                        int gNew = n.CalculateGCost(cur);
-                        int hNew = n.CalculateHCost();
-                        int fNew = gNew + hNew;
+                        var cur = openList.Pop();
+                        var neighbors = cur.GetNeighbors();
 
-                        if (!openList.Contains(n) || n.fCost > fNew)
+                        foreach (var n in neighbors)
                         {
-                            n.gCost = gNew;
-                            n.hCost = hNew;
-                            n.parent = cur;
-                            openList.Add(n);
-                            addToOpenListCallback?.Invoke(n);
+                            if (n.Equals(end))
+                            {
+                                n.parent = cur;
+                                result = n.Traceback();
+                                pathfindingStatus = PathfindingStatus.PathFound;
+                                isDone = true;
+                                onNext(new StreamData(NodeAction.End, n));
+                                onComplete();
+                                return;
+                            }
+                            if (!closedList.Contains(n))
+                            {
+                                int gNew = n.CalculateGCost(cur);
+                                int hNew = n.CalculateHCost();
+                                int fNew = gNew + hNew;
+
+                                if (!openList.Contains(n) || n.fCost > fNew)
+                                {
+                                    n.gCost = gNew;
+                                    n.hCost = hNew;
+                                    n.parent = cur;
+                                    openList.Add(n);
+                                    onNext(new StreamData(NodeAction.AddToOpenList, n));
+                                }
+                            }
                         }
+                        closedList.Add(cur);
+                        onNext(new StreamData(NodeAction.AddToClosedList, cur));
+                    }
+                    else
+                    {
+                        if (!token.IsCancellationRequested)
+                        {
+                            error = new OperationCanceledException(token);
+                            pathfindingStatus = PathfindingStatus.PathNotFound;
+                            isDone = true;
+                            onError(error);
+                            return;
+                        }
+                        result = closedList.Peek().Traceback();
+                        pathfindingStatus = PathfindingStatus.PathNotFound;
+                        isDone = true;
+                        onComplete();
                     }
                 }
-
-                closedList.Add(cur);
-                addToClosedListCallback?.Invoke(cur);
-                yield return waitYieldInstruction;
-            }
-
-            if (!token.IsCancellationRequested)
-            {
-                error = new OperationCanceledException(token);
-                isDone = true;
-                yield break;
-            }
-            result = closedList.Peek().Traceback();
-            isDone = true;
+            };
+            return waitSource.Subscribe(onWaitStream);
         }
     }
 }
