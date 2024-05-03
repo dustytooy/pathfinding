@@ -47,6 +47,7 @@ public class GridPathfinder : MonoBehaviour
 
     public void Initialize()
     {
+        PathfindingManager.InitializePool();
         _pathGrid = new Grid();
 
         phase = new ReactiveProperty<Phase>(Phase.Staging);
@@ -133,128 +134,67 @@ public class GridPathfinder : MonoBehaviour
         INode end = _pathGrid.PositionToCell(_end.position);
         INode[] path;
 
-
-        //var cancellationToken = new CancellationTokenSource();
-        //var waitForKeyDown = Observable.EveryUpdate()
-        //    .Where(_ => Input.GetKeyDown(KeyCode.Space)).ToYieldInstruction();
-        //var pathfindingStream = Observable.FromCoroutineValue<Request.PerStepData>(_ => RequestPathManager.Single(
-        //    start,
-        //    end,
-        //    waitForKeyDown,
-        //    cancellationToken.Token))
-        //    .Subscribe(data =>
-        //    {
-        //        var status = data.status;
-        //        Debug.Log($"Status: {status}");
-        //        foreach(var node in data.addedToOpenList)
-        //        {
-        //            var open = node as Cell;
-        //            int i = open.position.y * grid.width + open.position.x;
-        //            var cell = grid.cells[i];
-        //            cell.gCost.Value = node.gCost;
-        //            cell.hCost.Value = node.hCost;
-        //            cell.state.Value = MyCell.State.OpenList;
-        //            Debug.Log($"Added {open.position} to open list");
-        //        }
-        //        {
-        //            var closed = data.addedToClosedListOrGoal as Cell;
-        //            int i = closed.position.y * grid.width + closed.position.x;
-        //            var cell = grid.cells[i];
-        //            if (start.Equals(closed))
-        //            {
-        //                cell.state.Value = MyCell.State.Start;
-        //            }
-        //            else
-        //            {
-        //                cell.state.Value = MyCell.State.ClosedList;
-        //            }
-        //            Debug.Log($"Added {closed.position} to {(data.status == Request.Status.InProgress ? "closed list" : "final")}");
-        //        }
-        //        if (status != Request.Status.InProgress)
-        //        {
-        //            path = null;
-        //            _path = Array.ConvertAll(path, x =>
-        //            {
-        //                var c = x as Cell;
-        //                int i = c.position.y * grid.width + c.position.x;
-        //                var cell = grid.cells[i];
-        //                if (!start.Equals(x) && !end.Equals(x))
-        //                {
-        //                    cell.state.Value = MyCell.State.Path;
-        //                }
-
-        //                var v = _pathGrid.CellToPosition(c);
-        //                return grid.transform.position + new Vector3(v.x, 1f, v.y);
-        //            });
-
-        //            if (status == Request.Status.PathFound)
-        //            {
-        //                Debug.Log("Found path...");
-        //            }
-        //            else if (status == Request.Status.PathNotFound)
-        //            {
-        //                Debug.Log("Found no path...");
-        //            }
-        //        }
-        //    }).AddTo(this);
-
-        //var endKeyDown = Observable.EveryUpdate()
-        //    .Where(_ => Input.GetKeyDown(KeyCode.Escape)).Subscribe(_=>
-        //    {
-        //        pathfindingStream.Dispose();
-        //    });
-
-        var status = RequestPathManager.RequestPathSimple(
-            start,
-            end,
-            out path,
-            grid.width * grid.height / 2,
-            (x) =>
-            {
-                var c = x as Cell;
-                int i = c.position.y * grid.width + c.position.x;
-                var cell = grid.cells[i];
-                cell.gCost.Value = x.gCost;
-                cell.hCost.Value = x.hCost;
-                cell.state.Value = MyCell.State.OpenList;
-            },
-            (x) =>
-            {
-                var c = x as Cell;
-                int i = c.position.y * grid.width + c.position.x;
-                var cell = grid.cells[i];
-                if (start.Equals(x))
-                {
-                    cell.state.Value = MyCell.State.Start;
-                }
-                else
-                {
-                    cell.state.Value = MyCell.State.ClosedList;
-                }
-            });
-
-        _path = Array.ConvertAll(path, x =>
+        var handle = PathfindingManager.Request(start, end);
+        var request = handle.value;
+        Action<INode> addToOpenListCallback = (x) =>
         {
             var c = x as Cell;
             int i = c.position.y * grid.width + c.position.x;
             var cell = grid.cells[i];
-            if (!start.Equals(x) && !end.Equals(x))
+            cell.gCost.Value = x.gCost;
+            cell.hCost.Value = x.hCost;
+            cell.state.Value = MyCell.State.OpenList;
+        };
+        Action<INode> addToClosedListCallback = (x) =>
+        {
+            var c = x as Cell;
+            int i = c.position.y * grid.width + c.position.x;
+            var cell = grid.cells[i];
+            if (start.Equals(x))
             {
-                cell.state.Value = MyCell.State.Path;
+                cell.state.Value = MyCell.State.Start;
             }
+            else
+            {
+                cell.state.Value = MyCell.State.ClosedList;
+            }
+        };
+        Observable.FromCoroutine(_ => request.ProcessCoroutine(
+                addToOpenListCallback, 
+                addToClosedListCallback,
+                Observable.Timer(TimeSpan.FromSeconds(3)).ToYieldInstruction()))
+            .Subscribe(_ =>
+            {
+                if (request.isDone && request.error != null)
+                {
+                    path = request.result;
+                    var status = request.pathfindingStatus;
+                    _path = Array.ConvertAll(path, x =>
+                    {
+                        var c = x as Cell;
+                        int i = c.position.y * grid.width + c.position.x;
+                        var cell = grid.cells[i];
+                        if (!start.Equals(x) && !end.Equals(x))
+                        {
+                            cell.state.Value = MyCell.State.Path;
+                        }
 
-            var v = _pathGrid.CellToPosition(c);
-            return grid.transform.position + new Vector3(v.x, 1f, v.y);
-        });
+                        var v = _pathGrid.CellToPosition(c);
+                        return grid.transform.position + new Vector3(v.x, 1f, v.y);
+                    });
 
-        if (status == Request.Status.PathFound)
-        {
-            Debug.Log("Found path...");
-        }
-        else if (status == Request.Status.PathNotFound)
-        {
-            Debug.Log("Found no path...");
-        }
+                    if (status == Request.PathfindingStatus.PathFound)
+                    {
+                        Debug.Log("Found path...");
+                    }
+                    else if (status == Request.PathfindingStatus.PathNotFound)
+                    {
+                        Debug.Log("Found no path...");
+                    }
+
+                    handle.Release();
+                }
+            });
     }
 
     public Phase NextPhase()
@@ -291,6 +231,7 @@ public class GridPathfinder : MonoBehaviour
 
     private void OnDestroy()
     {
+        PathfindingManager.CleanPool();
         _pathGrid = null;
         _path = null;
         _start = null;

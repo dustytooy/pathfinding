@@ -1,144 +1,186 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Collections;
 using System.Threading;
 using Dustytoy.Collections;
 
 namespace Dustytoy.Pathfinding
 {
+    internal class OpenList : MinHeap<INode> { }
+    internal class ClosedList : MinHeap<INode> { }
     public class Request
     {
-        public enum Status
+        public static void InitializePool()
         {
+            // GC alloc
+            openListPool = new ObjectPool<OpenList>();
+            closedListPool = new ObjectPool<ClosedList>();
+        }
+        public static void CleanPool()
+        {
+            // Allow GC to clean
+            openListPool = null;
+            closedListPool = null;
+        }
+        private static ObjectPool<OpenList> openListPool;
+        private static ObjectPool<ClosedList> closedListPool;
+
+        public enum PathfindingStatus
+        {
+            Initialized,
+            InProgress,
             PathNotFound,
             PathFound,
-            InProgress,
         }
 
-        //public class PerStepData
-        //{
-        //    public Status status;
-        //    public INode[] addedToOpenList;
-        //    public INode addedToClosedListOrGoal; // If In Progress, the node in closed list, if Path Found, the goal node
-        //}
+        public bool isDone { get; private set; }
+        public INode[] result { get; private set; }
+        public PathfindingStatus pathfindingStatus { get; private set; }
+        public Exception error { get; private set; }
 
-        //public Request() { }
+        private OpenList openList;
+        private ObjectPoolHandle<OpenList> openListHandle;
+        private ClosedList closedList;
+        private ObjectPoolHandle<ClosedList> closedListHandle;
 
-        //public bool IsCompleted { get; private set; }
-        //public INode[] Result { get; private set; }
-        //public Exception Error { get; private set; }
-        //public bool HasError => Error != null;
+        private INode start;
+        private INode end;
+        private CancellationToken token;
 
-        //private MinHeap<INode> openList;
-        //private MinHeap<INode> closedList;
-        //private List<INode> addedToOpenList;
+        public void Initialize(INode start, INode end, CancellationToken cancellationToken = default)
+        {
+            this.start = start;
+            this.end = end;
+            openListHandle = openListPool.Acquire(x=>x.Clear());
+            closedListHandle = closedListPool.Acquire(x => x.Clear());
 
-        //private INode start;
-        //private INode end;
-        //private IEnumerator<long> observable;
-        //private CancellationToken cancellationToken;
-        //private PerStepData perStepData = new PerStepData();
+            isDone = false;
+            result = null;
+            error = null;
+            pathfindingStatus = PathfindingStatus.Initialized;
 
-        //public void Initialize(
-        //    INode start,
-        //    INode end,
-        //    IEnumerator<long> wait,
-        //    CancellationToken cancellationToken)
-        //{
-        //    openList = RequestPathManager.heapPool.Acquire();
-        //    closedList = RequestPathManager.heapPool.Acquire();
-        //    addedToOpenList = RequestPathManager.addedToOpenListPool.Acquire();
+            token = cancellationToken;
+        }
 
-        //    this.start = start;
-        //    this.end = end;
-        //    this.observable = wait;
-        //    this.cancellationToken = cancellationToken;
-            
-        //    openList.Add(start);
-        //}
+        public void Clean()
+        {
+            start = null;
+            end = null;
 
-        //public void Clean()
-        //{
-        //    start = null;
-        //    end = null;
-        //    observable = null;
+            closedListHandle.Release();
+            openListHandle.Release();
+            openList = null;
+            closedList = null;
+        }
 
-        //    RequestPathManager.heapPool.Release(openList);
-        //    RequestPathManager.heapPool.Release(closedList);
-        //    RequestPathManager.addedToOpenListPool.Release(addedToOpenList);
-        //    openList = null;
-        //    closedList = null;
-        //    addedToOpenList = null;
-        //}
+        public PathfindingStatus Process(
+            Action<INode> addToOpenListCallback = null,
+            Action<INode> addToClosedListCallback = null)
+        {
+            pathfindingStatus = PathfindingStatus.InProgress;
+            openList = openListHandle.value;
+            closedList = closedListHandle.value;
+            openList.Add(start);
 
-        //public IEnumerator Get()
-        //{
-        //    IsCompleted = false;
-        //    Result = null;
+            while (!openList.IsEmpty() && !token.IsCancellationRequested)
+            {
+                var cur = openList.Pop();
+                var neighbors = cur.GetNeighbors();
 
-        //    while (!openList.IsEmpty() && !cancellationToken.IsCancellationRequested)
-        //    {
-        //        var data = Step();
-        //        if(data.status == Status.PathFound)
-        //        {
-        //            Result = data.addedToClosedListOrGoal.Traceback();
-        //            IsCompleted = true;
-        //        }
+                foreach (var n in neighbors)
+                {
+                    if (n.Equals(end))
+                    {
+                        n.parent = cur;
+                        result = n.Traceback();
+                        isDone = true;
+                        return PathfindingStatus.PathFound;
+                    }
+                    if (!closedList.Contains(n))
+                    {
+                        int gNew = n.CalculateGCost(cur);
+                        int hNew = n.CalculateHCost();
+                        int fNew = gNew + hNew;
 
-        //        yield return observable;
-        //    }
+                        if (!openList.Contains(n) || n.fCost > fNew)
+                        {
+                            n.gCost = gNew;
+                            n.hCost = hNew;
+                            n.parent = cur;
+                            openList.Add(n);
+                            addToOpenListCallback?.Invoke(n);
+                        }
+                    }
+                }
 
-        //    if (cancellationToken.IsCancellationRequested) yield break;
+                closedList.Add(cur);
+                addToClosedListCallback?.Invoke(cur);
+            }
 
-        //    perStepData.status = Status.PathNotFound;
+            if (!token.IsCancellationRequested)
+            {
+                error = new OperationCanceledException(token);
+                isDone = true;
+                return PathfindingStatus.PathNotFound;
+            }
+            result = closedList.Peek().Traceback();
+            isDone = true;
+            return PathfindingStatus.PathNotFound;
+        }
 
-        //    Result = closedList.Peek().Traceback();
-        //    IsCompleted = true;
+        public IEnumerator ProcessCoroutine(
+            Action<INode> addToOpenListCallback = null,
+            Action<INode> addToClosedListCallback = null,
+            IEnumerator waitYieldInstruction = null)
+        {
+            pathfindingStatus = PathfindingStatus.InProgress;
+            openList = openListHandle.value;
+            closedList = closedListHandle.value;
+            openList.Add(start);
 
-        //    yield return observable;
-        //}
+            while (!openList.IsEmpty() && !token.IsCancellationRequested)
+            {
+                var cur = openList.Pop();
+                var neighbors = cur.GetNeighbors();
 
-        //private PerStepData Step()
-        //{
-        //    addedToOpenList.Clear();
+                foreach (var n in neighbors)
+                {
+                    if (n.Equals(end))
+                    {
+                        n.parent = cur;
+                        result = n.Traceback();
+                        isDone = true;
+                        yield break;
+                    }
+                    if (!closedList.Contains(n))
+                    {
+                        int gNew = n.CalculateGCost(cur);
+                        int hNew = n.CalculateHCost();
+                        int fNew = gNew + hNew;
 
-        //    var cur = openList.Pop();
-        //    var neighbors = cur.GetNeighbors();
-        //    foreach (var n in neighbors)
-        //    {
-        //        if (n.Equals(end))
-        //        {
-        //            n.parent = cur;
+                        if (!openList.Contains(n) || n.fCost > fNew)
+                        {
+                            n.gCost = gNew;
+                            n.hCost = hNew;
+                            n.parent = cur;
+                            openList.Add(n);
+                            addToOpenListCallback?.Invoke(n);
+                        }
+                    }
+                }
 
-        //            perStepData.addedToOpenList = addedToOpenList.ToArray();
-        //            perStepData.addedToClosedListOrGoal = n;
-        //            perStepData.status = Status.PathFound;
+                closedList.Add(cur);
+                addToClosedListCallback?.Invoke(cur);
+                yield return waitYieldInstruction;
+            }
 
-        //            return perStepData;
-        //        }
-        //        if (!closedList.Contains(n))
-        //        {
-        //            int gNew = n.CalculateGCost(cur);
-        //            int hNew = n.CalculateHCost();
-        //            int fNew = gNew + hNew;
-
-        //            if (!openList.Contains(n) || n.fCost > fNew)
-        //            {
-        //                n.gCost = gNew;
-        //                n.hCost = hNew;
-        //                n.parent = cur;
-        //                openList.Add(n);
-        //                addedToOpenList.Add(n);
-        //            }
-        //        }
-        //    }
-
-        //    closedList.Add(cur);
-
-        //    perStepData.addedToOpenList = addedToOpenList.ToArray();
-        //    perStepData.addedToClosedListOrGoal = cur;
-        //    perStepData.status = Status.InProgress;
-        //    return perStepData;
-        //}
+            if (!token.IsCancellationRequested)
+            {
+                error = new OperationCanceledException(token);
+                isDone = true;
+                yield break;
+            }
+            result = closedList.Peek().Traceback();
+            isDone = true;
+        }
     }
 }

@@ -3,52 +3,54 @@ using System.Collections.Generic;
 
 namespace Dustytoy.Collections
 {
+    public struct ObjectPoolHandle<T> where T : new()
+    {
+        public T value;
+        private ObjectPool<T> _pool;
+        private Action<T> _onReleased;
+        internal ObjectPoolHandle(T value, ObjectPool<T> pool,
+            Action<T> onReleased = null)
+        {
+            this.value = value;
+            _pool = pool;
+            _onReleased = onReleased;
+        }
+
+        public void Release()
+        {
+            _pool.Release(value);
+            _onReleased?.Invoke(value);
+        }
+    }
     public class ObjectPool<T> where T : new()
     {
         public List<T> elements { get; private set; }
-        public static readonly int DefaultInitialCapacity = 10;
-        public static ObjectPool<T> Instance
-        {
-            get
-            {
-                if (_instance == null)
-                {
-                    _instance = new ObjectPool<T>(DefaultInitialCapacity);
-                }
-                return _instance;
-            }
-        }
-        public static void Release()
-        {
-            _instance = null;
-        }
-        private static ObjectPool<T> _instance;
 
-        private ObjectPool(int initialCapacity)
+        public ObjectPool()
+        {
+            elements = new List<T>();
+        }
+
+        public ObjectPool(int initialCapacity = 0)
         {
             elements = new List<T>(initialCapacity);
-            _instance = this;
         }
 
-        public T Acquire(Action<T> onAcquired = null)
+        public ObjectPoolHandle<T> Acquire(Action<T> onReleased = null)
         {
             int count = elements.Count;
             if (count == 0)
             {
-                T newElement = new T();
-                onAcquired?.Invoke(newElement);
-                return newElement;
+                T newValue = new T();
+                return new ObjectPoolHandle<T>(newValue, this, onReleased);
             }
-            T pooledElement = elements[count - 1];
+            T pooledValue = elements[count - 1];
             elements.RemoveAt(count - 1);
-            onAcquired?.Invoke(pooledElement);
-
-            return pooledElement;
+            return new ObjectPoolHandle<T>(pooledValue, this, onReleased);
         }
-        public void Release(T element, Action<T> onReleased = null)
+        internal void Release(T element)
         {
             elements.Add(element);
-            onReleased?.Invoke(element);
         }
 
     }

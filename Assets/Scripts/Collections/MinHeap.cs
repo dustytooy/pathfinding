@@ -7,7 +7,7 @@ namespace Dustytoy.Collections
     // From https://egorikas.com/max-and-min-heap-implementation-with-csharp/
     public class MinHeap<T> where T : IComparable<T>
     {
-        public static readonly int DefaultInitialCapacity = 10;
+        public static readonly int DefaultInitialCapacity = 8;
         //private readonly T[] _elements;
         private readonly List<T> _elements;
         private int _size;
