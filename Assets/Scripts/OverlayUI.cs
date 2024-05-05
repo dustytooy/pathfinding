@@ -15,12 +15,15 @@ public class OverlayUI : MonoBehaviour
     [SerializeField]
     private TMPro.TMP_Text nextText;
 
-    private static readonly Dictionary<GridPathfinder.Phase, string> colors = new Dictionary<GridPathfinder.Phase, string>()
+    private static readonly Dictionary<GridPathfinder.Phase, string> nextButtonTextDict = new Dictionary<GridPathfinder.Phase, string>()
     {
-        { GridPathfinder.Phase.Staging, "Select" },
-        { GridPathfinder.Phase.Select, "Pathfind" },
-        { GridPathfinder.Phase.Pathfinding, "Select" },
+        { GridPathfinder.Phase.SelectObstacles, "X" },
+        { GridPathfinder.Phase.SelectStartAndEndPositions, "Start" },
+        { GridPathfinder.Phase.Pathfinding, "End" },
     };
+
+    private GridPathfinder _pathfinder;
+    private MyGrid _grid;
 
     private void Awake()
     {
@@ -41,27 +44,35 @@ public class OverlayUI : MonoBehaviour
     public void Initialize()
     {
         var disposables = new CompositeDisposable();
+        _pathfinder = GridPathfinder.Instance;
+        _grid = MyGrid.Instance;
 
         // [UI -> Game State] Reset button reset the phase to staging
         resetButton.OnClickAsObservable().Subscribe(_ =>
         {
-            if(GridPathfinder.Instance.phase.Value != GridPathfinder.Phase.Staging)
-            {
-                GridPathfinder.Instance.phase.Value = GridPathfinder.Phase.Staging;
-            }
+            _pathfinder.phase.Value = GridPathfinder.Phase.SelectStartAndEndPositions;
+            _grid.Clean(false);
         }).AddTo(disposables);
 
         // [UI -> Game State] Next button move the current phase to next phase
         nextButton.OnClickAsObservable().Subscribe(_ =>
         {
-            GridPathfinder.Instance.NextPhase();
+            if(_pathfinder.phase.Value == GridPathfinder.Phase.SelectStartAndEndPositions)
+            {
+                _pathfinder.phase.Value = GridPathfinder.Phase.Pathfinding;
+            }
+            if (_pathfinder.phase.Value == GridPathfinder.Phase.Pathfinding)
+            {
+                _pathfinder.phase.Value = GridPathfinder.Phase.SelectStartAndEndPositions;
+            }
         }).AddTo(disposables);
 
         // [Game State -> UI] Next button move the current phase to next phase
         GridPathfinder.Instance.onPhaseChanged
-            .Subscribe(_ =>
+            .Subscribe(x =>
             {
-                nextText.text = colors[_];
+                nextButton.interactable = x != GridPathfinder.Phase.SelectObstacles;
+                nextText.text = nextButtonTextDict[x];
             }).AddTo(disposables);
 
         disposables.AddTo(this);

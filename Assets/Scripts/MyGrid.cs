@@ -16,6 +16,8 @@ public class MyGrid : MonoBehaviour
 
     public MyCell[] cells { get; private set; }
 
+    private GridPathfinder _pathfinder;
+
     private void Awake()
     {
         if (_instance == null)
@@ -35,6 +37,8 @@ public class MyGrid : MonoBehaviour
 
     public void Initialize()
     {
+        _pathfinder = GridPathfinder.Instance;
+
         var disposables = new CompositeDisposable();
 
         canvas.sizeDelta = new Vector2(width, height) * MyCell.size;
@@ -73,18 +77,12 @@ public class MyGrid : MonoBehaviour
 
 
         // Begining of each phase (skip to avoid unnecessary clean up at start)
-        GridPathfinder.Instance.onPhaseChanged.Skip(1).Subscribe(_ =>
-        {
-            switch (_)
+        _pathfinder.onPhaseChanged.Skip(1)
+            .Where(x => x == GridPathfinder.Phase.SelectObstacles || x == GridPathfinder.Phase.SelectStartAndEndPositions)
+            .Subscribe(_ =>
             {
-                case GridPathfinder.Phase.Staging:
-                    Clean(false);
-                    break;
-                case GridPathfinder.Phase.Select:
-                    Clean(true);
-                    break;
-            }
-        }).AddTo(disposables);
+                Clean(true);
+            }).AddTo(disposables);
 
         disposables.AddTo(this);
     }

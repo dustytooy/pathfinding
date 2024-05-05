@@ -19,8 +19,8 @@ public class GridPathfinder : MonoBehaviour
 
     public enum Phase : int
     {
-        Staging,
-        Select,
+        SelectObstacles,
+        SelectStartAndEndPositions,
         Pathfinding,
     }
 
@@ -62,40 +62,55 @@ public class GridPathfinder : MonoBehaviour
         PathfindingManager.InitializePool();
         _pathGrid = new Grid();
 
-        phase = new ReactiveProperty<Phase>(Phase.Staging).AddTo(this);
+        phase = new ReactiveProperty<Phase>(Phase.SelectStartAndEndPositions).AddTo(this);
         clickedCell = new ReactiveProperty<MyCell>().AddTo(this);
         _clickCount = new ReactiveProperty<int>(0).AddTo(this);
         onPhaseChanged = phase.DistinctUntilChanged();
 
         var disposables = new CompositeDisposable();
-        // Begining of each phase (skip to avoid unnecessary clean up at start)
-        onPhaseChanged.Skip(1).Subscribe(_ =>
+
+        // TODO: Refactor state/phase management
+        onPhaseChanged.Skip(1).Subscribe(x =>
         {
-            switch (_)
+            switch (x)
             {
-                case Phase.Staging:
-                    if (_cancellationTokenSource != null && _cancellationTokenSource.Token.CanBeCanceled)
-                    {
-                        _cancellationTokenSource.Cancel();
-                    }
-                    Clean();
-                    break;
-                case Phase.Select:
-                    if (_cancellationTokenSource != null && _cancellationTokenSource.Token.CanBeCanceled)
-                    {
-                        _cancellationTokenSource.Cancel();
-                    }
-                    Clean();
+                case Phase.SelectObstacles: case Phase.SelectStartAndEndPositions:
+                    Cancel();
                     break;
                 case Phase.Pathfinding:
+                    if (_start == null || _end == null)
+                    {
+                        Debug.LogWarning("Either start or end position is missing!");
+                        return;
+                    }
                     Pathfinding();
                     break;
             }
         }).AddTo(disposables);
 
-        // Staging obstacles
+        // Switch phases with keyboard
+        Observable.EveryUpdate()
+            .Where(_ => Input.GetKeyDown(KeyCode.LeftShift))
+            .Subscribe(_ =>
+            {
+                if(phase.Value == Phase.SelectStartAndEndPositions)
+                {
+                    phase.Value = Phase.SelectObstacles;
+                }
+            }).AddTo(disposables);
+        Observable.EveryUpdate()
+            .Where(_ => Input.GetKeyUp(KeyCode.LeftShift))
+            .Subscribe(_ =>
+            {
+                if (phase.Value == Phase.SelectObstacles)
+                {
+                    phase.Value = Phase.SelectStartAndEndPositions;
+                }
+            }).AddTo(disposables);
+
+        // Staging obstacles with clicks
         var clickedCellStream = clickedCell.Skip(1);
-        Observable.WithLatestFrom(clickedCellStream, onPhaseChanged,(x, y) => (x, y)).Where(_ => _.y == Phase.Staging)
+        Observable.WithLatestFrom(clickedCellStream, onPhaseChanged,(x, y) => (x, y)).Where(data => data.y == Phase.SelectObstacles)
             .Subscribe(_ =>
             {
                 var cell = _.x;
@@ -104,7 +119,7 @@ public class GridPathfinder : MonoBehaviour
                 return;
             }).AddTo(disposables);
         // Staging start and end position
-        Observable.WithLatestFrom(clickedCellStream, onPhaseChanged, (x, y) => (x, y)).Where(_ => _.y == Phase.Select)
+        Observable.WithLatestFrom(clickedCellStream, onPhaseChanged, (x, y) => (x, y)).Where(data => data.y == Phase.SelectStartAndEndPositions)
             .Subscribe(_ =>
             {
                 var cell = _.x;
@@ -119,6 +134,11 @@ public class GridPathfinder : MonoBehaviour
                         _end.state.Value = MyCell.State.None;
                         _end = null;
                     }
+                    if (_start != null)
+                    {
+                        _start.state.Value = MyCell.State.None;
+                        _start = null;
+                    }
                     _start = cell;
                     _start.state.Value = MyCell.State.Start;
                 }
@@ -126,7 +146,8 @@ public class GridPathfinder : MonoBehaviour
                 {
                     _end = cell;
                     _end.state.Value = MyCell.State.End;
-                    }
+                    phase.Value = Phase.Pathfinding;
+                }
             }).AddTo(disposables);
 
         disposables.AddTo(this);
@@ -157,7 +178,7 @@ public class GridPathfinder : MonoBehaviour
         var (handle, request) = PathfindingManager.Request(start, end, _cancellationTokenSource.Token);
 
         // Process request
-        var interval = Observable.Interval(TimeSpan.FromSeconds(0.5))
+        var interval = Observable.Interval(TimeSpan.FromSeconds(0.1))
             .TakeWhile(_ => !request.isDone || _cancellationTokenSource.IsCancellationRequested)
             .AsUnitObservable();
 
@@ -176,19 +197,8 @@ public class GridPathfinder : MonoBehaviour
                 int i = c.position.y * grid.width + c.position.x;
                 var cell = grid.cells[i];
 
-                if (data.action == Request.NodeAction.AddToOpenList)
-                {
-                    cell.gCost.Value = c.gCost;
-                    cell.hCost.Value = c.hCost;
-                    cell.state.Value = MyCell.State.OpenList;
-                    Debug.Log($"Added {(data.node as Cell).position.ToString()} to Open List");
-                }
-                else if (data.action == Request.NodeAction.AddToClosedList)
-                {
-                    cell.state.Value = MyCell.State.ClosedList;
-                    Debug.Log($"Added {(data.node as Cell).position.ToString()} to Closed List");
-                }
-                else if (data.action == Request.NodeAction.Start)
+
+                if (data.action == Request.NodeAction.Start)
                 {
                     cell.state.Value = MyCell.State.Start;
                     Debug.Log($"Start from {(data.node as Cell).position.ToString()}");
@@ -197,6 +207,18 @@ public class GridPathfinder : MonoBehaviour
                 {
                     cell.state.Value = MyCell.State.End;
                     Debug.Log($"End at {(data.node as Cell).position.ToString()}");
+                }
+                else if (data.action == Request.NodeAction.AddToOpenList && cell != _start) // comparison because starting cell is also added to open list per algo
+                {
+                    cell.gCost.Value = c.gCost;
+                    cell.hCost.Value = c.hCost;
+                    cell.state.Value = MyCell.State.OpenList;
+                    Debug.Log($"Added {(data.node as Cell).position.ToString()} to Open List");
+                }
+                else if (data.action == Request.NodeAction.AddToClosedList && cell != _start) // comparison because starting cell is also added to open list per algo
+                {
+                    cell.state.Value = MyCell.State.ClosedList;
+                    Debug.Log($"Added {(data.node as Cell).position.ToString()} to Closed List");
                 }
             },
             (e) =>
@@ -237,27 +259,13 @@ public class GridPathfinder : MonoBehaviour
             });
     }
 
-    public Phase NextPhase()
+    public void Cancel()
     {
-        switch (phase.Value)
+        if (_cancellationTokenSource != null && _cancellationTokenSource.Token.CanBeCanceled)
         {
-            case Phase.Staging:
-                phase.Value = Phase.Select;
-                break;
-            // Auto rotate between Select and Pathfinding
-            case Phase.Select:
-                if(_start == null || _end == null)
-                {
-                    Debug.LogWarning("Either missing start or end cell!");
-                    return Phase.Select;
-                }
-                phase.Value = Phase.Pathfinding;
-                break;
-            case Phase.Pathfinding:
-                phase.Value = Phase.Select;
-                break;
+            _cancellationTokenSource.Cancel();
         }
-        return phase.Value;
+        Clean();
     }
 
     private void Clean()
