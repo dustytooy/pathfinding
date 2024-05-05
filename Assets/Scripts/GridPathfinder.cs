@@ -23,10 +23,17 @@ public class GridPathfinder : MonoBehaviour
         SelectStartAndEndPositions,
         Pathfinding,
     }
+    public enum Mode : int
+    {
+        TimeStep,
+        ManualStep
+    }
 
     public IObservable<Phase> onPhaseChanged { get; private set; }
     public ReactiveProperty<Phase> phase { get; set; }
     public ReactiveProperty<MyCell> clickedCell { get; set; }
+    public ReactiveProperty<Mode> mode { get; set; }
+    public ReactiveProperty<float> intervalInSeconds { get; set; }
 
     private MyCell _start;
     private MyCell _end;
@@ -64,6 +71,8 @@ public class GridPathfinder : MonoBehaviour
 
         phase = new ReactiveProperty<Phase>(Phase.SelectStartAndEndPositions).AddTo(this);
         clickedCell = new ReactiveProperty<MyCell>().AddTo(this);
+        mode = new ReactiveProperty<Mode>(Mode.TimeStep).AddTo(this);
+        intervalInSeconds = new ReactiveProperty<float>(0.2f).AddTo(this);
         _clickCount = new ReactiveProperty<int>(0).AddTo(this);
         onPhaseChanged = phase.DistinctUntilChanged();
 
@@ -182,12 +191,29 @@ public class GridPathfinder : MonoBehaviour
         _cancellationTokenSource = new CancellationTokenSource();
         var (handle, request) = PathfindingManager.Request(start, end, _cancellationTokenSource.Token);
 
-        // Process request
-        var interval = Observable.Interval(TimeSpan.FromSeconds(0.1))
+        // Initialize step stream
+        IObservable<Unit> stepStream;
+        if(mode.Value == Mode.ManualStep)
+        {
+            stepStream = Observable.EveryUpdate().Where(_ => Input.GetKeyUp(KeyCode.Space))
             .TakeWhile(_ => !request.isDone || _cancellationTokenSource.IsCancellationRequested)
             .AsUnitObservable();
+        }
+        else if (mode.Value == Mode.TimeStep)
+        {
+            stepStream = Observable.Interval(TimeSpan.FromSeconds(intervalInSeconds.Value))
+            .TakeWhile(_ => !request.isDone || _cancellationTokenSource.IsCancellationRequested)
+            .AsUnitObservable();
+        }
+        else
+        {
+            stepStream = Observable.EveryUpdate()
+                .TakeWhile(_ => !request.isDone || _cancellationTokenSource.IsCancellationRequested)
+                .AsUnitObservable();
+        }
 
-        var disposable = request.ProcessStream(interval)
+        // Process request
+        var disposable = request.ProcessStream(stepStream)
             .Finally(() =>
             {
                 handle.Release();

@@ -13,6 +13,12 @@ public class OverlayUI : MonoBehaviour
     [SerializeField]
     private Button nextButton;
     [SerializeField]
+    private Toggle manualToggle;
+    [SerializeField]
+    private Slider timeIntervalSlider;
+    [SerializeField]
+    private TMPro.TMP_Text displayTimeIntervalText;
+    [SerializeField]
     private TMPro.TMP_Text nextText;
 
     private static readonly Dictionary<GridPathfinder.Phase, string> nextButtonTextDict = new Dictionary<GridPathfinder.Phase, string>()
@@ -67,11 +73,41 @@ public class OverlayUI : MonoBehaviour
             }
         }).AddTo(disposables);
 
+        // [UI -> Game State] Auto step toggle change the step mode
+        manualToggle.OnValueChangedAsObservable().Subscribe(x =>
+        {
+            _pathfinder.mode.Value = x ? GridPathfinder.Mode.ManualStep : GridPathfinder.Mode.TimeStep;
+        }).AddTo(disposables);
+
+        // [UI -> Game State] Time interval slider toggle change the time interval between each steps
+        timeIntervalSlider.OnValueChangedAsObservable().Subscribe(x =>
+        {
+            _pathfinder.intervalInSeconds.Value = x;
+            displayTimeIntervalText.text = x.ToString("0.##");
+        }).AddTo(disposables);
+
         // [Game State -> UI] Next button move the current phase to next phase
         GridPathfinder.Instance.onPhaseChanged
             .Subscribe(x =>
             {
-                nextButton.interactable = x != GridPathfinder.Phase.SelectObstacles;
+                switch (x)
+                {
+                    case GridPathfinder.Phase.SelectObstacles:
+                        nextButton.interactable = false;
+                        timeIntervalSlider.interactable = true;
+                        manualToggle.interactable = true;
+                        break;
+                    case GridPathfinder.Phase.SelectStartAndEndPositions:
+                        nextButton.interactable = true;
+                        timeIntervalSlider.interactable = true;
+                        manualToggle.interactable = true;
+                        break;
+                    case GridPathfinder.Phase.Pathfinding:
+                        nextButton.interactable = true;
+                        timeIntervalSlider.interactable = false;
+                        manualToggle.interactable = false;
+                        break;
+                }
                 nextText.text = nextButtonTextDict[x];
             }).AddTo(disposables);
 
