@@ -1,6 +1,6 @@
 using UnityEditor;
 
-
+#if UNITY_EDITOR
 public class ScriptOptions
 {
     //Auto Refresh
@@ -99,3 +99,4 @@ public class ScriptOptions
         return true;
     }
 }
+#endif
