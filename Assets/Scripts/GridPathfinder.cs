@@ -132,76 +132,41 @@ public class GridPathfinder : MonoBehaviour
         INode end = _pathGrid.PositionToCell(_end.position);
         INode[] path;
 
-        var (handle, request) = PathfindingManager.Request(start, end);
-
-        Action<Request.StreamData> processStreamData = (x) =>
-        {
-            var c = x.node as Cell;
-            int i = c.position.y * grid.width + c.position.x;
-            var cell = grid.cells[i];
-
-            if (x.action == Request.NodeAction.AddToOpenList)
-            {
-                cell.gCost.Value = c.gCost;
-                cell.hCost.Value = c.hCost;
-                cell.state.Value = MyCell.State.OpenList;
-                Debug.Log($"Added {(x.node as Cell).position.ToString()} to Open List");
-            }
-            else if (x.action == Request.NodeAction.AddToClosedList)
-            {
-                cell.state.Value = MyCell.State.ClosedList;
-                Debug.Log($"Added {(x.node as Cell).position.ToString()} to Closed List");
-            }
-            else if (x.action == Request.NodeAction.Start)
-            {
-                cell.state.Value = MyCell.State.Start;
-                Debug.Log($"Start from {(x.node as Cell).position.ToString()}");
-            }
-            else if (x.action == Request.NodeAction.End)
-            {
-                cell.state.Value = MyCell.State.End;
-                Debug.Log($"End at {(x.node as Cell).position.ToString()}");
-            }
-        };
-
-        Action writePath = () =>
-        {
-            path = request.result;
-            var status = request.pathfindingStatus;
-            _path = Array.ConvertAll(path, x =>
-            {
-                var c = x as Cell;
-                int i = c.position.y * grid.width + c.position.x;
-                var cell = grid.cells[i];
-
-                if (!start.Equals(x) && !end.Equals(x))
-                {
-
-                    cell.state.Value = MyCell.State.Path;
-                }
-
-                var v = _pathGrid.CellToPosition(c);
-                return grid.transform.position + new Vector3(v.x, 1f, v.y);
-            });
-
-            if (status == Request.PathfindingStatus.PathFound)
-            {
-                Debug.Log("Found path...");
-            }
-            else if (status == Request.PathfindingStatus.PathNotFound)
-            {
-                Debug.Log("Found no path...");
-            }
-        };
-
+        var token = new System.Threading.CancellationTokenSource();
+        var (handle, request) = PathfindingManager.Request(start, end, token.Token);
         var interval = Observable.Interval(TimeSpan.FromSeconds(0.5))
             .Where(_ => !request.isDone)
             .AsUnitObservable();
-        var disposable = request.ProcessStreamWaitable(
-            interval,
+
+        var disposable = request.ProcessStream(interval).Subscribe(
             data =>
             {
-                processStreamData(data);
+                var c = data.node as Cell;
+                int i = c.position.y * grid.width + c.position.x;
+                var cell = grid.cells[i];
+
+                if (data.action == Request.NodeAction.AddToOpenList)
+                {
+                    cell.gCost.Value = c.gCost;
+                    cell.hCost.Value = c.hCost;
+                    cell.state.Value = MyCell.State.OpenList;
+                    Debug.Log($"Added {(data.node as Cell).position.ToString()} to Open List");
+                }
+                else if (data.action == Request.NodeAction.AddToClosedList)
+                {
+                    cell.state.Value = MyCell.State.ClosedList;
+                    Debug.Log($"Added {(data.node as Cell).position.ToString()} to Closed List");
+                }
+                else if (data.action == Request.NodeAction.Start)
+                {
+                    cell.state.Value = MyCell.State.Start;
+                    Debug.Log($"Start from {(data.node as Cell).position.ToString()}");
+                }
+                else if (data.action == Request.NodeAction.End)
+                {
+                    cell.state.Value = MyCell.State.End;
+                    Debug.Log($"End at {(data.node as Cell).position.ToString()}");
+                }
             },
             (e) =>
             {
@@ -210,7 +175,32 @@ public class GridPathfinder : MonoBehaviour
             },
             () =>
             {
-                writePath();
+                path = request.result;
+                var status = request.pathfindingStatus;
+                _path = Array.ConvertAll(path, x =>
+                {
+                    var c = x as Cell;
+                    int i = c.position.y * grid.width + c.position.x;
+                    var cell = grid.cells[i];
+
+                    if (!start.Equals(x) && !end.Equals(x))
+                    {
+
+                        cell.state.Value = MyCell.State.Path;
+                    }
+
+                    var v = _pathGrid.CellToPosition(c);
+                    return grid.transform.position + new Vector3(v.x, 1f, v.y);
+                });
+
+                if (status == Request.PathfindingStatus.PathFound)
+                {
+                    Debug.Log("Found path...");
+                }
+                else if (status == Request.PathfindingStatus.PathNotFound)
+                {
+                    Debug.Log("Found no path...");
+                }
                 handle.Release();
             });
     }

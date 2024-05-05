@@ -74,6 +74,15 @@ namespace Dustytoy.Pathfinding
 
         public void Process()
         {
+            if (isDone)
+            {
+                throw new InvalidOperationException("Request is done");
+            }
+            if (token.IsCancellationRequested)
+            {
+                throw new OperationCanceledException(token);
+            }
+
             pathfindingStatus = PathfindingStatus.InProgress;
             openList = openListHandle.value;
             closedList = closedListHandle.value;
@@ -112,12 +121,6 @@ namespace Dustytoy.Pathfinding
                 closedList.Add(cur);
             }
 
-            if (!token.IsCancellationRequested)
-            {
-                error = new OperationCanceledException(token);
-                pathfindingStatus = PathfindingStatus.PathNotFound;
-                isDone = true;
-            }
             result = closedList.Peek().Traceback();
             pathfindingStatus = PathfindingStatus.PathNotFound;
             isDone = true;
@@ -142,8 +145,17 @@ namespace Dustytoy.Pathfinding
             }
         }
 
-        public IDisposable ProcessStream(Action<StreamData> onNext = null, Action<Exception> onError = null, Action onComplete = null)
+        public IObservable<StreamData> ProcessStream()
         {
+            if(isDone)
+            {
+                throw new InvalidOperationException("Request is done");
+            }
+            if (token.IsCancellationRequested)
+            {
+                throw new OperationCanceledException(token);
+            }
+
             return Observable.Create<StreamData> (observer =>
             {
                 pathfindingStatus = PathfindingStatus.InProgress;
@@ -190,11 +202,9 @@ namespace Dustytoy.Pathfinding
                     observer.OnNext(new StreamData(NodeAction.AddToClosedList, cur));
                 }
 
-                if (!token.IsCancellationRequested)
+                if (token.IsCancellationRequested)
                 {
                     error = new OperationCanceledException(token);
-                    pathfindingStatus = PathfindingStatus.PathNotFound;
-                    isDone = true;
                     observer.OnError(error);
                     return Disposable.Empty;
                 }
@@ -203,79 +213,98 @@ namespace Dustytoy.Pathfinding
                 isDone = true;
                 observer.OnCompleted();
                 return Disposable.Empty;
-            }).Subscribe(onNext, onError, onComplete);
+            });
         }
 
-        public IDisposable ProcessStreamWaitable(IObservable<Unit> waitSource, Action<StreamData> onNext = null, Action<Exception> onError = null, Action onComplete = null)
+        public IObservable<StreamData> ProcessStream(IObservable<Unit> source)
         {
-            pathfindingStatus = PathfindingStatus.InProgress;
-            openList = openListHandle.value;
-            closedList = closedListHandle.value;
-            bool addedStartNode = false;
-            Action<Unit> onWaitStream = _ =>
+            if (isDone)
             {
-                if (!addedStartNode)
+                throw new InvalidOperationException("Request is done");
+            }
+            if (token.IsCancellationRequested)
+            {
+                throw new OperationCanceledException(token);
+            }
+
+            return Observable.Create<StreamData>(observer =>
+            {
+                pathfindingStatus = PathfindingStatus.InProgress;
+                openList = openListHandle.value;
+                closedList = closedListHandle.value;
+                bool addedStartNode = false;
+
+                return source.Subscribe(
+                x =>
                 {
-                    openList.Add(start);
-                    addedStartNode = true;
-                    onNext(new StreamData(NodeAction.Start, start));
-                }
-                else
-                {
-                    if (!openList.IsEmpty() && !token.IsCancellationRequested)
+                    if (!addedStartNode && !token.IsCancellationRequested)
                     {
-                        var cur = openList.Pop();
-                        var neighbors = cur.GetNeighbors();
-
-                        foreach (var n in neighbors)
-                        {
-                            if (n.Equals(end))
-                            {
-                                n.parent = cur;
-                                result = n.Traceback();
-                                pathfindingStatus = PathfindingStatus.PathFound;
-                                isDone = true;
-                                onNext(new StreamData(NodeAction.End, n));
-                                onComplete();
-                                return;
-                            }
-                            if (!closedList.Contains(n))
-                            {
-                                int gNew = n.CalculateGCost(cur);
-                                int hNew = n.CalculateHCost();
-                                int fNew = gNew + hNew;
-
-                                if (!openList.Contains(n) || n.fCost > fNew)
-                                {
-                                    n.gCost = gNew;
-                                    n.hCost = hNew;
-                                    n.parent = cur;
-                                    openList.Add(n);
-                                    onNext(new StreamData(NodeAction.AddToOpenList, n));
-                                }
-                            }
-                        }
-                        closedList.Add(cur);
-                        onNext(new StreamData(NodeAction.AddToClosedList, cur));
+                        openList.Add(start);
+                        addedStartNode = true;
+                        observer.OnNext(new StreamData(NodeAction.Start, start));
                     }
                     else
                     {
-                        if (!token.IsCancellationRequested)
+                        if (!openList.IsEmpty() && !token.IsCancellationRequested)
                         {
-                            error = new OperationCanceledException(token);
+                            var cur = openList.Pop();
+                            var neighbors = cur.GetNeighbors();
+
+                            foreach (var n in neighbors)
+                            {
+                                if (n.Equals(end))
+                                {
+                                    n.parent = cur;
+                                    result = n.Traceback();
+                                    pathfindingStatus = PathfindingStatus.PathFound;
+                                    isDone = true;
+                                    observer.OnNext(new StreamData(NodeAction.End, n));
+                                    observer.OnCompleted();
+                                    return;
+                                }
+                                if (!closedList.Contains(n))
+                                {
+                                    int gNew = n.CalculateGCost(cur);
+                                    int hNew = n.CalculateHCost();
+                                    int fNew = gNew + hNew;
+
+                                    if (!openList.Contains(n) || n.fCost > fNew)
+                                    {
+                                        n.gCost = gNew;
+                                        n.hCost = hNew;
+                                        n.parent = cur;
+                                        openList.Add(n);
+                                        observer.OnNext(new StreamData(NodeAction.AddToOpenList, n));
+                                    }
+                                }
+                            }
+                            closedList.Add(cur);
+                            observer.OnNext(new StreamData(NodeAction.AddToClosedList, cur));
+                        }
+                        else
+                        {
+                            if (token.IsCancellationRequested)
+                            {
+                                error = new OperationCanceledException(token);
+                                observer.OnError(error);
+                                return;
+                            }
+                            result = closedList.Peek().Traceback();
                             pathfindingStatus = PathfindingStatus.PathNotFound;
                             isDone = true;
-                            onError(error);
-                            return;
+                            observer.OnCompleted();
                         }
-                        result = closedList.Peek().Traceback();
-                        pathfindingStatus = PathfindingStatus.PathNotFound;
-                        isDone = true;
-                        onComplete();
                     }
+                },
+                observer.OnError,
+                () =>
+                    {
+                        // If wait source is completed, also cancel this stream
+                        error = new OperationCanceledException();
+                        observer.OnError(error);
+                    });
                 }
-            };
-            return waitSource.Subscribe(onWaitStream);
+            );
         }
     }
 }
