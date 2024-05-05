@@ -66,9 +66,20 @@ namespace Dustytoy.Pathfinding.Grid
                 {
                     if (i == 0 && j == 0)
                         continue;
+                    bool corner = (i == -1 && j == -1) || (i == -1 && j == 1) || (i == 1 && j == -1) || (i == 1 && j == 1);
                     int newX = position.x + i;
                     int newY = position.y + j;
                     var newCell = _grid[newX, newY];
+                    if (corner)
+                    {
+                        var horizontal = _grid[position.x, newY];
+                        var vertical = _grid[newX, position.y];
+                        if((horizontal != null && horizontal.isObstacle) &&
+                           (vertical != null && vertical.isObstacle))
+                        {
+                            continue;
+                        }
+                    }
                     if (newCell != null && !newCell.isObstacle)
                     {
                         neighbors.Add(newCell);

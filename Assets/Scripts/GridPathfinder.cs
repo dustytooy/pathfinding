@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using UnityEngine;
 using UniRx;
 using Dustytoy.Pathfinding;
@@ -14,17 +15,25 @@ public class GridPathfinder : MonoBehaviour
 
     public static GridPathfinder Instance { get { return _instance; } }
     private static GridPathfinder _instance;
+    private CancellationTokenSource _cancellationTokenSource;
 
     public enum Phase : int
     {
-        Staging,
-        Select,
+        SelectObstacles,
+        SelectStartAndEndPositions,
         Pathfinding,
+    }
+    public enum Mode : int
+    {
+        TimeStep,
+        ManualStep
     }
 
     public IObservable<Phase> onPhaseChanged { get; private set; }
     public ReactiveProperty<Phase> phase { get; set; }
     public ReactiveProperty<MyCell> clickedCell { get; set; }
+    public ReactiveProperty<Mode> mode { get; set; }
+    public ReactiveProperty<float> intervalInSeconds { get; set; }
 
     private MyCell _start;
     private MyCell _end;
@@ -45,78 +54,124 @@ public class GridPathfinder : MonoBehaviour
         }
     }
 
+    private void OnDestroy()
+    {
+        PathfindingManager.CleanPool();
+        _pathGrid = null;
+        _path = null;
+        _start = null;
+        _end = null;
+        _instance = null;
+    }
+
     public void Initialize()
     {
         PathfindingManager.InitializePool();
         _pathGrid = new Grid();
 
-        phase = new ReactiveProperty<Phase>(Phase.Staging);
-        clickedCell = new ReactiveProperty<MyCell>();
-        _clickCount = new ReactiveProperty<int>(0);
+        phase = new ReactiveProperty<Phase>(Phase.SelectStartAndEndPositions).AddTo(this);
+        clickedCell = new ReactiveProperty<MyCell>().AddTo(this);
+        mode = new ReactiveProperty<Mode>(Mode.TimeStep).AddTo(this);
+        intervalInSeconds = new ReactiveProperty<float>(0.2f).AddTo(this);
+        _clickCount = new ReactiveProperty<int>(0).AddTo(this);
         onPhaseChanged = phase.DistinctUntilChanged();
 
+        var disposables = new CompositeDisposable();
 
-        // Begining of each phase (skip to avoid unnecessary clean up at start)
-        onPhaseChanged.Skip(1).Subscribe(_ =>
+        // TODO: Refactor state/phase management
+        onPhaseChanged.Skip(1).Subscribe(x =>
         {
-            switch (_)
+            switch (x)
             {
-                case Phase.Staging:
-                    Clean();
-                    break;
-                case Phase.Select:
-                    Clean();
+                case Phase.SelectObstacles: case Phase.SelectStartAndEndPositions:
+                    Cancel();
                     break;
                 case Phase.Pathfinding:
+                    if (_start == null || _end == null)
+                    {
+                        return;
+                    }
                     Pathfinding();
                     break;
             }
-        });
+        }).AddTo(disposables);
 
-        // Staging obstacles
+        // Switch phases with keyboard
+        Observable.EveryUpdate()
+            .Where(_ => Input.GetKeyDown(KeyCode.LeftShift))
+            .Subscribe(_ =>
+            {
+                if(phase.Value == Phase.SelectStartAndEndPositions)
+                {
+                    phase.Value = Phase.SelectObstacles;
+                }
+            }).AddTo(disposables);
+        Observable.EveryUpdate()
+            .Where(_ => Input.GetKeyUp(KeyCode.LeftShift))
+            .Subscribe(_ =>
+            {
+                if (phase.Value == Phase.SelectObstacles)
+                {
+                    phase.Value = Phase.SelectStartAndEndPositions;
+                }
+            }).AddTo(disposables);
+        Observable.EveryUpdate()
+            .Where(_ => Input.GetKeyUp(KeyCode.Escape))
+            .Subscribe(_ =>
+            {
+                if (phase.Value == Phase.Pathfinding)
+                {
+                    phase.Value = Phase.SelectStartAndEndPositions;
+                }
+            }).AddTo(disposables);
+
+        // Staging obstacles with clicks
         var clickedCellStream = clickedCell.Skip(1);
-        Observable.WithLatestFrom(
-            clickedCellStream,
-            onPhaseChanged,
-            (x, y) => (x,y)).Subscribe(_ =>
+        Observable.WithLatestFrom(clickedCellStream, onPhaseChanged,(x, y) => (x, y)).Where(data => data.y == Phase.SelectObstacles)
+            .Subscribe(_ =>
             {
                 var cell = _.x;
-                var phase = _.y;
-                if (phase == Phase.Staging)
+                cell.terrain.Value = cell.terrain.Value == MyCell.Terrain.Obstacle ? MyCell.Terrain.None : MyCell.Terrain.Obstacle;
+                return;
+            }).AddTo(disposables);
+        // Staging start and end position
+        Observable.WithLatestFrom(clickedCellStream, onPhaseChanged, (x, y) => (x, y)).Where(data => data.y == Phase.SelectStartAndEndPositions)
+            .Subscribe(_ =>
+            {
+                var cell = _.x;
+                if (cell.terrain.Value == MyCell.Terrain.Obstacle) { return; }
+                // Increment click count during select phase
+                int click = _clickCount.Value = (_clickCount.Value + 1) % 2;
+                // Selecting positions
+                if (click == 1) // First click for start
                 {
-                    cell.terrain.Value = cell.terrain.Value == MyCell.Terrain.Obstacle ? MyCell.Terrain.None : MyCell.Terrain.Obstacle;
-                    Debug.Log($"Modified terrain ({cell.position}: {cell.terrain.Value})");
-                    return;
+                    if (_end != null)
+                    {
+                        _end.state.Value = MyCell.State.None;
+                        _end = null;
+                    }
+                    if (_start != null)
+                    {
+                        _start.state.Value = MyCell.State.None;
+                        _start = null;
+                    }
+                    _start = cell;
+                    _start.state.Value = MyCell.State.Start;
                 }
-                else if(phase == Phase.Select)
+                else if (click == 0) // Second click for end
                 {
-                    if (cell.terrain.Value == MyCell.Terrain.Obstacle) { return; }
-                    // Increment click count during select phase
-                    int click = _clickCount.Value = (_clickCount.Value + 1) % 2;
-                    // Selecting positions
-                    if (click == 1) // First click for start
-                    {
-                        if (_end != null)
-                        {
-                            _end.state.Value = MyCell.State.None;
-                            _end = null;
-                        }
-                        _start = cell;
-                        _start.state.Value = MyCell.State.Start;
-                    }
-                    else if(click == 0) // Second click for end
-                    {
-                        _end = cell;
-                        _end.state.Value = MyCell.State.End;
-                    }
+                    _end = cell;
+                    _end.state.Value = MyCell.State.End;
+                    phase.Value = Phase.Pathfinding;
                 }
-            });
+            }).AddTo(disposables);
+
+        disposables.AddTo(this);
     }
 
     public void Pathfinding()
     {
-        Debug.Log("Finding path...");
-
+        // Initialize data
         Cell[] cells = Array.ConvertAll(grid.cells, x => 
         {
             return new Cell(
@@ -132,123 +187,106 @@ public class GridPathfinder : MonoBehaviour
         INode end = _pathGrid.PositionToCell(_end.position);
         INode[] path;
 
-        var (handle, request) = PathfindingManager.Request(start, end);
+        // Initialize request
+        _cancellationTokenSource = new CancellationTokenSource();
+        var (handle, request) = PathfindingManager.Request(start, end, _cancellationTokenSource.Token);
 
-        Action<Request.StreamData> processStreamData = (x) =>
+        // Initialize step stream
+        IObservable<Unit> stepStream;
+        if(mode.Value == Mode.ManualStep)
         {
-            var c = x.node as Cell;
-            int i = c.position.y * grid.width + c.position.x;
-            var cell = grid.cells[i];
-
-            if (x.action == Request.NodeAction.AddToOpenList)
-            {
-                cell.gCost.Value = c.gCost;
-                cell.hCost.Value = c.hCost;
-                cell.state.Value = MyCell.State.OpenList;
-                Debug.Log($"Added {(x.node as Cell).position.ToString()} to Open List");
-            }
-            else if (x.action == Request.NodeAction.AddToClosedList)
-            {
-                cell.state.Value = MyCell.State.ClosedList;
-                Debug.Log($"Added {(x.node as Cell).position.ToString()} to Closed List");
-            }
-            else if (x.action == Request.NodeAction.Start)
-            {
-                cell.state.Value = MyCell.State.Start;
-                Debug.Log($"Start from {(x.node as Cell).position.ToString()}");
-            }
-            else if (x.action == Request.NodeAction.End)
-            {
-                cell.state.Value = MyCell.State.End;
-                Debug.Log($"End at {(x.node as Cell).position.ToString()}");
-            }
-        };
-
-        Action writePath = () =>
+            stepStream = Observable.EveryUpdate().Where(_ => Input.GetKeyUp(KeyCode.Space))
+            .TakeWhile(_ => !request.isDone || _cancellationTokenSource.IsCancellationRequested)
+            .AsUnitObservable();
+        }
+        else if (mode.Value == Mode.TimeStep)
         {
-            path = request.result;
-            var status = request.pathfindingStatus;
-            _path = Array.ConvertAll(path, x =>
+            stepStream = Observable.Interval(TimeSpan.FromSeconds(intervalInSeconds.Value))
+            .TakeWhile(_ => !request.isDone || _cancellationTokenSource.IsCancellationRequested)
+            .AsUnitObservable();
+        }
+        else
+        {
+            stepStream = Observable.EveryUpdate()
+                .TakeWhile(_ => !request.isDone || _cancellationTokenSource.IsCancellationRequested)
+                .AsUnitObservable();
+        }
+
+        // Process request
+        var disposable = request.ProcessStream(stepStream)
+            .Finally(() =>
             {
-                var c = x as Cell;
+                handle.Release();
+                _cancellationTokenSource.Dispose();
+                _cancellationTokenSource = null;
+            })
+            .Subscribe(
+            data =>
+            {
+                var c = data.node as Cell;
                 int i = c.position.y * grid.width + c.position.x;
                 var cell = grid.cells[i];
 
-                if (!start.Equals(x) && !end.Equals(x))
+
+                if (data.action == Request.NodeAction.Start)
                 {
-
-                    cell.state.Value = MyCell.State.Path;
+                    cell.state.Value = MyCell.State.Start;
                 }
-
-                var v = _pathGrid.CellToPosition(c);
-                return grid.transform.position + new Vector3(v.x, 1f, v.y);
-            });
-
-            if (status == Request.PathfindingStatus.PathFound)
-            {
-                Debug.Log("Found path...");
-            }
-            else if (status == Request.PathfindingStatus.PathNotFound)
-            {
-                Debug.Log("Found no path...");
-            }
-        };
-
-        var interval = Observable.Interval(TimeSpan.FromSeconds(0.5))
-            .Where(_ => !request.isDone)
-            .AsUnitObservable();
-        var disposable = request.ProcessStreamWaitable(
-            interval,
-            data =>
-            {
-                processStreamData(data);
+                else if (data.action == Request.NodeAction.End)
+                {
+                    cell.state.Value = MyCell.State.End;
+                }
+                else if (data.action == Request.NodeAction.AddToOpenList && cell != _start) // comparison because starting cell is also added to open list per algo
+                {
+                    cell.gCost.Value = c.gCost;
+                    cell.hCost.Value = c.hCost;
+                    cell.state.Value = MyCell.State.OpenList;
+                }
+                else if (data.action == Request.NodeAction.AddToClosedList && cell != _start) // comparison because starting cell is also added to open list per algo
+                {
+                    cell.state.Value = MyCell.State.ClosedList;
+                }
             },
-            (e) =>
+            (e) => 
             {
-                Debug.LogError(e);
-                handle.Release();
+                if(e is OperationCanceledException)
+                {
+                    Debug.LogWarning(e);
+                }
             },
             () =>
             {
-                writePath();
-                handle.Release();
+                path = request.result;
+                var status = request.pathfindingStatus;
+                _path = Array.ConvertAll(path, x =>
+                {
+                    var c = x as Cell;
+                    int i = c.position.y * grid.width + c.position.x;
+                    var cell = grid.cells[i];
+
+                    if (!start.Equals(x) && !end.Equals(x))
+                    {
+
+                        cell.state.Value = MyCell.State.Path;
+                    }
+
+                    var v = _pathGrid.CellToPosition(c);
+                    return grid.transform.position + new Vector3(v.x, 1f, v.y);
+                });
             });
     }
 
-    public Phase NextPhase()
+    public void Cancel()
     {
-        switch (phase.Value)
+        if (_cancellationTokenSource != null && _cancellationTokenSource.Token.CanBeCanceled)
         {
-            case Phase.Staging:
-                phase.Value = Phase.Select;
-                break;
-            // Auto rotate between Select and Pathfinding
-            case Phase.Select:
-                if(_start == null || _end == null)
-                {
-                    Debug.LogWarning("Either missing start or end cell!");
-                    return Phase.Select;
-                }
-                phase.Value = Phase.Pathfinding;
-                break;
-            case Phase.Pathfinding:
-                phase.Value = Phase.Select;
-                break;
+            _cancellationTokenSource.Cancel();
         }
-        return phase.Value;
+        Clean();
     }
 
     private void Clean()
     {
-        _path = null;
-        _start = null;
-        _end = null;
-    }
-
-    private void OnDestroy()
-    {
-        PathfindingManager.CleanPool();
-        _pathGrid = null;
         _path = null;
         _start = null;
         _end = null;

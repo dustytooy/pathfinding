@@ -28,10 +28,10 @@ public class MyCell : MonoBehaviour
 
     private void Start()
     {
-        gCost = new ReactiveProperty<int>(-1);
-        hCost = new ReactiveProperty<int>(-1);
-        fCost = gCost.CombineLatest(hCost, (x,y)=>x+y).ToReadOnlyReactiveProperty();
-        state = new ReactiveProperty<State>(State.None);
-        terrain = new ReactiveProperty<Terrain>(Terrain.None);
+        gCost = new ReactiveProperty<int>(-1).AddTo(this);
+        hCost = new ReactiveProperty<int>(-1).AddTo(this);
+        fCost = gCost.CombineLatest(hCost, (x,y)=>x+y).ToReadOnlyReactiveProperty().AddTo(this);
+        state = new ReactiveProperty<State>(State.None).AddTo(this);
+        terrain = new ReactiveProperty<Terrain>(Terrain.None).AddTo(this);
     }
 }

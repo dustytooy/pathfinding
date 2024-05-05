@@ -56,9 +56,9 @@ public class CellUI : MonoBehaviour
     {
         image.color = terrainColors[terrain];
     }
-    public void OnClick(Action action)
+    public IDisposable OnClick(Action action)
     {
-        button.OnClickAsObservable().Subscribe(_ =>
+        return button.OnClickAsObservable().Subscribe(_ =>
         {
             action.Invoke();
         });

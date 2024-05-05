@@ -16,6 +16,8 @@ public class MyGrid : MonoBehaviour
 
     public MyCell[] cells { get; private set; }
 
+    private GridPathfinder _pathfinder;
+
     private void Awake()
     {
         if (_instance == null)
@@ -28,8 +30,17 @@ public class MyGrid : MonoBehaviour
         }
     }
 
+    private void OnDestroy()
+    {
+        _instance = null;
+    }
+
     public void Initialize()
     {
+        _pathfinder = GridPathfinder.Instance;
+
+        var disposables = new CompositeDisposable();
+
         canvas.sizeDelta = new Vector2(width, height) * MyCell.size;
         canvas.position = transform.position + new Vector3(width * 0.5f, 0, height * 0.5f) * MyCell.size;
         Camera.main.orthographicSize = height * 0.5f;
@@ -52,31 +63,28 @@ public class MyGrid : MonoBehaviour
                 Observable.NextFrame().Subscribe(_ =>
                 {
                     cell.position = new Vector2(center.x, center.z);
-                    cell.gCost.CombineLatest(cell.hCost, (x, y) => new Vector2Int(x, y)).Subscribe(ui.UpdateCost);
-                    cell.state.Subscribe(ui.UpdateColor);
-                    cell.terrain.Subscribe(ui.UpdateColor);
+                    cell.gCost.CombineLatest(cell.hCost, (x, y) => new Vector2Int(x, y)).Subscribe(ui.UpdateCost).AddTo(disposables);
+                    cell.state.Subscribe(ui.UpdateColor).AddTo(disposables);
+                    cell.terrain.Subscribe(ui.UpdateColor).AddTo(disposables);
 
                     ui.OnClick(() =>
                     {
                         GridPathfinder.Instance.clickedCell.Value = cell;
-                    });
+                    }).AddTo(disposables);
                 });
             }
         }
 
+
         // Begining of each phase (skip to avoid unnecessary clean up at start)
-        GridPathfinder.Instance.onPhaseChanged.Skip(1).Subscribe(_ =>
-        {
-            switch (_)
+        _pathfinder.onPhaseChanged.Skip(1)
+            .Where(x => x == GridPathfinder.Phase.SelectObstacles || x == GridPathfinder.Phase.SelectStartAndEndPositions)
+            .Subscribe(_ =>
             {
-                case GridPathfinder.Phase.Staging:
-                    Clean(false);
-                    break;
-                case GridPathfinder.Phase.Select:
-                    Clean(true);
-                    break;
-            }
-        });
+                Clean(true);
+            }).AddTo(disposables);
+
+        disposables.AddTo(this);
     }
 
     public void Clean(bool keepTerrain)
