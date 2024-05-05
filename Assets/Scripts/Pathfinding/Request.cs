@@ -80,7 +80,7 @@ namespace Dustytoy.Pathfinding
             }
             if (token.IsCancellationRequested)
             {
-                throw new OperationCanceledException(token);
+                throw error = new OperationCanceledException(token);
             }
 
             pathfindingStatus = PathfindingStatus.InProgress;
@@ -153,7 +153,7 @@ namespace Dustytoy.Pathfinding
             }
             if (token.IsCancellationRequested)
             {
-                throw new OperationCanceledException(token);
+                throw error = new OperationCanceledException(token);
             }
 
             return Observable.Create<StreamData> (observer =>
@@ -224,7 +224,7 @@ namespace Dustytoy.Pathfinding
             }
             if (token.IsCancellationRequested)
             {
-                throw new OperationCanceledException(token);
+                throw error = new OperationCanceledException(token);
             }
 
             return Observable.Create<StreamData>(observer =>

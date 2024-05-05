@@ -33,25 +33,37 @@ public class OverlayUI : MonoBehaviour
             Destroy(this);
         }
     }
+    private void OnDestroy()
+    {
+        _instance = null;
+    }
 
     public void Initialize()
     {
+        var disposables = new CompositeDisposable();
+
+        // [UI -> Game State] Reset button reset the phase to staging
         resetButton.OnClickAsObservable().Subscribe(_ =>
         {
             if(GridPathfinder.Instance.phase.Value != GridPathfinder.Phase.Staging)
             {
                 GridPathfinder.Instance.phase.Value = GridPathfinder.Phase.Staging;
             }
-        });
+        }).AddTo(disposables);
+
+        // [UI -> Game State] Next button move the current phase to next phase
         nextButton.OnClickAsObservable().Subscribe(_ =>
         {
             GridPathfinder.Instance.NextPhase();
-        });
+        }).AddTo(disposables);
 
+        // [Game State -> UI] Next button move the current phase to next phase
         GridPathfinder.Instance.onPhaseChanged
             .Subscribe(_ =>
             {
                 nextText.text = colors[_];
-            });
+            }).AddTo(disposables);
+
+        disposables.AddTo(this);
     }
 }

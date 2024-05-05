@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using UnityEngine;
 using UniRx;
 using Dustytoy.Pathfinding;
@@ -14,6 +15,7 @@ public class GridPathfinder : MonoBehaviour
 
     public static GridPathfinder Instance { get { return _instance; } }
     private static GridPathfinder _instance;
+    private CancellationTokenSource _cancellationTokenSource;
 
     public enum Phase : int
     {
@@ -45,33 +47,51 @@ public class GridPathfinder : MonoBehaviour
         }
     }
 
+    private void OnDestroy()
+    {
+        PathfindingManager.CleanPool();
+        _pathGrid = null;
+        _path = null;
+        _start = null;
+        _end = null;
+        _instance = null;
+    }
+
     public void Initialize()
     {
         PathfindingManager.InitializePool();
         _pathGrid = new Grid();
 
-        phase = new ReactiveProperty<Phase>(Phase.Staging);
-        clickedCell = new ReactiveProperty<MyCell>();
-        _clickCount = new ReactiveProperty<int>(0);
+        phase = new ReactiveProperty<Phase>(Phase.Staging).AddTo(this);
+        clickedCell = new ReactiveProperty<MyCell>().AddTo(this);
+        _clickCount = new ReactiveProperty<int>(0).AddTo(this);
         onPhaseChanged = phase.DistinctUntilChanged();
 
-
+        var disposables = new CompositeDisposable();
         // Begining of each phase (skip to avoid unnecessary clean up at start)
         onPhaseChanged.Skip(1).Subscribe(_ =>
         {
             switch (_)
             {
                 case Phase.Staging:
+                    if(_cancellationTokenSource != null && !_cancellationTokenSource.IsCancellationRequested)
+                    {
+                        _cancellationTokenSource.Cancel();
+                    }
                     Clean();
                     break;
                 case Phase.Select:
+                    if (_cancellationTokenSource != null && !_cancellationTokenSource.IsCancellationRequested)
+                    {
+                        _cancellationTokenSource.Cancel();
+                    }
                     Clean();
                     break;
                 case Phase.Pathfinding:
                     Pathfinding();
                     break;
             }
-        });
+        }).AddTo(disposables);
 
         // Staging obstacles
         var clickedCellStream = clickedCell.Skip(1);
@@ -110,13 +130,16 @@ public class GridPathfinder : MonoBehaviour
                         _end.state.Value = MyCell.State.End;
                     }
                 }
-            });
+            }).AddTo(disposables);
+
+        disposables.AddTo(this);
     }
 
     public void Pathfinding()
     {
         Debug.Log("Finding path...");
 
+        // Initialize data
         Cell[] cells = Array.ConvertAll(grid.cells, x => 
         {
             return new Cell(
@@ -132,13 +155,22 @@ public class GridPathfinder : MonoBehaviour
         INode end = _pathGrid.PositionToCell(_end.position);
         INode[] path;
 
-        var token = new System.Threading.CancellationTokenSource();
-        var (handle, request) = PathfindingManager.Request(start, end, token.Token);
+        // Initialize request
+        _cancellationTokenSource = new CancellationTokenSource();
+        var (handle, request) = PathfindingManager.Request(start, end, _cancellationTokenSource.Token);
+
+        // Process request
         var interval = Observable.Interval(TimeSpan.FromSeconds(0.5))
-            .Where(_ => !request.isDone)
+            .TakeWhile(_ => !request.isDone || _cancellationTokenSource.IsCancellationRequested)
             .AsUnitObservable();
 
-        var disposable = request.ProcessStream(interval).Subscribe(
+        var disposable = request.ProcessStream(interval)
+            .Finally(() =>
+            {
+                handle.Release();
+                _cancellationTokenSource.Dispose();
+            })
+            .Subscribe(
             data =>
             {
                 var c = data.node as Cell;
@@ -170,8 +202,10 @@ public class GridPathfinder : MonoBehaviour
             },
             (e) =>
             {
-                Debug.LogError(e);
-                handle.Release();
+                if(e is  OperationCanceledException)
+                {
+                    Debug.LogWarning(e);
+                }
             },
             () =>
             {
@@ -201,7 +235,6 @@ public class GridPathfinder : MonoBehaviour
                 {
                     Debug.Log("Found no path...");
                 }
-                handle.Release();
             });
     }
 
@@ -230,15 +263,6 @@ public class GridPathfinder : MonoBehaviour
 
     private void Clean()
     {
-        _path = null;
-        _start = null;
-        _end = null;
-    }
-
-    private void OnDestroy()
-    {
-        PathfindingManager.CleanPool();
-        _pathGrid = null;
         _path = null;
         _start = null;
         _end = null;
