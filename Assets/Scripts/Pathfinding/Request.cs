@@ -76,7 +76,7 @@ namespace Dustytoy.Pathfinding
         {
             if (isDone)
             {
-                throw new InvalidOperationException("Request is done");
+                throw new InvalidOperationException("Request is already done");
             }
             if (token.IsCancellationRequested)
             {
@@ -149,7 +149,7 @@ namespace Dustytoy.Pathfinding
         {
             if(isDone)
             {
-                throw new InvalidOperationException("Request is done");
+                throw new InvalidOperationException("Request is already done!");
             }
             if (token.IsCancellationRequested)
             {

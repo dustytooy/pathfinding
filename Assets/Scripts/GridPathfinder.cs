@@ -80,7 +80,6 @@ public class GridPathfinder : MonoBehaviour
                 case Phase.Pathfinding:
                     if (_start == null || _end == null)
                     {
-                        Debug.LogWarning("Either start or end position is missing!");
                         return;
                     }
                     Pathfinding();
@@ -107,6 +106,15 @@ public class GridPathfinder : MonoBehaviour
                     phase.Value = Phase.SelectStartAndEndPositions;
                 }
             }).AddTo(disposables);
+        Observable.EveryUpdate()
+            .Where(_ => Input.GetKeyUp(KeyCode.Escape))
+            .Subscribe(_ =>
+            {
+                if (phase.Value == Phase.Pathfinding)
+                {
+                    phase.Value = Phase.SelectStartAndEndPositions;
+                }
+            }).AddTo(disposables);
 
         // Staging obstacles with clicks
         var clickedCellStream = clickedCell.Skip(1);
@@ -115,7 +123,6 @@ public class GridPathfinder : MonoBehaviour
             {
                 var cell = _.x;
                 cell.terrain.Value = cell.terrain.Value == MyCell.Terrain.Obstacle ? MyCell.Terrain.None : MyCell.Terrain.Obstacle;
-                Debug.Log($"Modified terrain ({cell.position}: {cell.terrain.Value})");
                 return;
             }).AddTo(disposables);
         // Staging start and end position
@@ -155,8 +162,6 @@ public class GridPathfinder : MonoBehaviour
 
     public void Pathfinding()
     {
-        Debug.Log("Started request!");
-
         // Initialize data
         Cell[] cells = Array.ConvertAll(grid.cells, x => 
         {
@@ -188,7 +193,6 @@ public class GridPathfinder : MonoBehaviour
                 handle.Release();
                 _cancellationTokenSource.Dispose();
                 _cancellationTokenSource = null;
-                Debug.Log("Ended request (released)!");
             })
             .Subscribe(
             data =>
@@ -201,31 +205,27 @@ public class GridPathfinder : MonoBehaviour
                 if (data.action == Request.NodeAction.Start)
                 {
                     cell.state.Value = MyCell.State.Start;
-                    Debug.Log($"Start from {(data.node as Cell).position.ToString()}");
                 }
                 else if (data.action == Request.NodeAction.End)
                 {
                     cell.state.Value = MyCell.State.End;
-                    Debug.Log($"End at {(data.node as Cell).position.ToString()}");
                 }
                 else if (data.action == Request.NodeAction.AddToOpenList && cell != _start) // comparison because starting cell is also added to open list per algo
                 {
                     cell.gCost.Value = c.gCost;
                     cell.hCost.Value = c.hCost;
                     cell.state.Value = MyCell.State.OpenList;
-                    Debug.Log($"Added {(data.node as Cell).position.ToString()} to Open List");
                 }
                 else if (data.action == Request.NodeAction.AddToClosedList && cell != _start) // comparison because starting cell is also added to open list per algo
                 {
                     cell.state.Value = MyCell.State.ClosedList;
-                    Debug.Log($"Added {(data.node as Cell).position.ToString()} to Closed List");
                 }
             },
-            (e) =>
+            (e) => 
             {
-                if(e is  OperationCanceledException)
+                if(e is OperationCanceledException)
                 {
-                    Debug.Log("Cancelled request!");
+                    Debug.LogWarning(e);
                 }
             },
             () =>
@@ -247,15 +247,6 @@ public class GridPathfinder : MonoBehaviour
                     var v = _pathGrid.CellToPosition(c);
                     return grid.transform.position + new Vector3(v.x, 1f, v.y);
                 });
-
-                if (status == Request.PathfindingStatus.PathFound)
-                {
-                    Debug.Log("Found path...");
-                }
-                else if (status == Request.PathfindingStatus.PathNotFound)
-                {
-                    Debug.Log("Found no path...");
-                }
             });
     }
 
