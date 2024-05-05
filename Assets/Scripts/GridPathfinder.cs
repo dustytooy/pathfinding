@@ -74,14 +74,14 @@ public class GridPathfinder : MonoBehaviour
             switch (_)
             {
                 case Phase.Staging:
-                    if(_cancellationTokenSource != null && !_cancellationTokenSource.IsCancellationRequested)
+                    if (_cancellationTokenSource != null && _cancellationTokenSource.Token.CanBeCanceled)
                     {
                         _cancellationTokenSource.Cancel();
                     }
                     Clean();
                     break;
                 case Phase.Select:
-                    if (_cancellationTokenSource != null && !_cancellationTokenSource.IsCancellationRequested)
+                    if (_cancellationTokenSource != null && _cancellationTokenSource.Token.CanBeCanceled)
                     {
                         _cancellationTokenSource.Cancel();
                     }
@@ -95,41 +95,38 @@ public class GridPathfinder : MonoBehaviour
 
         // Staging obstacles
         var clickedCellStream = clickedCell.Skip(1);
-        Observable.WithLatestFrom(
-            clickedCellStream,
-            onPhaseChanged,
-            (x, y) => (x,y)).Subscribe(_ =>
+        Observable.WithLatestFrom(clickedCellStream, onPhaseChanged,(x, y) => (x, y)).Where(_ => _.y == Phase.Staging)
+            .Subscribe(_ =>
             {
                 var cell = _.x;
-                var phase = _.y;
-                if (phase == Phase.Staging)
+                cell.terrain.Value = cell.terrain.Value == MyCell.Terrain.Obstacle ? MyCell.Terrain.None : MyCell.Terrain.Obstacle;
+                Debug.Log($"Modified terrain ({cell.position}: {cell.terrain.Value})");
+                return;
+            }).AddTo(disposables);
+        // Staging start and end position
+        Observable.WithLatestFrom(clickedCellStream, onPhaseChanged, (x, y) => (x, y)).Where(_ => _.y == Phase.Select)
+            .Subscribe(_ =>
+            {
+                var cell = _.x;
+                if (cell.terrain.Value == MyCell.Terrain.Obstacle) { return; }
+                // Increment click count during select phase
+                int click = _clickCount.Value = (_clickCount.Value + 1) % 2;
+                // Selecting positions
+                if (click == 1) // First click for start
                 {
-                    cell.terrain.Value = cell.terrain.Value == MyCell.Terrain.Obstacle ? MyCell.Terrain.None : MyCell.Terrain.Obstacle;
-                    Debug.Log($"Modified terrain ({cell.position}: {cell.terrain.Value})");
-                    return;
+                    if (_end != null)
+                    {
+                        _end.state.Value = MyCell.State.None;
+                        _end = null;
+                    }
+                    _start = cell;
+                    _start.state.Value = MyCell.State.Start;
                 }
-                else if(phase == Phase.Select)
+                else if (click == 0) // Second click for end
                 {
-                    if (cell.terrain.Value == MyCell.Terrain.Obstacle) { return; }
-                    // Increment click count during select phase
-                    int click = _clickCount.Value = (_clickCount.Value + 1) % 2;
-                    // Selecting positions
-                    if (click == 1) // First click for start
-                    {
-                        if (_end != null)
-                        {
-                            _end.state.Value = MyCell.State.None;
-                            _end = null;
-                        }
-                        _start = cell;
-                        _start.state.Value = MyCell.State.Start;
+                    _end = cell;
+                    _end.state.Value = MyCell.State.End;
                     }
-                    else if(click == 0) // Second click for end
-                    {
-                        _end = cell;
-                        _end.state.Value = MyCell.State.End;
-                    }
-                }
             }).AddTo(disposables);
 
         disposables.AddTo(this);
@@ -137,7 +134,7 @@ public class GridPathfinder : MonoBehaviour
 
     public void Pathfinding()
     {
-        Debug.Log("Finding path...");
+        Debug.Log("Started request!");
 
         // Initialize data
         Cell[] cells = Array.ConvertAll(grid.cells, x => 
@@ -169,6 +166,8 @@ public class GridPathfinder : MonoBehaviour
             {
                 handle.Release();
                 _cancellationTokenSource.Dispose();
+                _cancellationTokenSource = null;
+                Debug.Log("Ended request (released)!");
             })
             .Subscribe(
             data =>
@@ -204,7 +203,7 @@ public class GridPathfinder : MonoBehaviour
             {
                 if(e is  OperationCanceledException)
                 {
-                    Debug.LogWarning(e);
+                    Debug.Log("Cancelled request!");
                 }
             },
             () =>
