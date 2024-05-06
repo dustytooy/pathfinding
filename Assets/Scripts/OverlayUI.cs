@@ -2,12 +2,11 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using UniRx;
+using UniRx.Triggers;
+using Dustytoy.DI;
 
 public class OverlayUI : MonoBehaviour
 {
-    public static OverlayUI Instance { get { return _instance; } }
-    private static OverlayUI _instance;
-
     [SerializeField]
     private Button resetButton;
     [SerializeField]
@@ -31,27 +30,18 @@ public class OverlayUI : MonoBehaviour
     private GridPathfinder _pathfinder;
     private MyGrid _grid;
 
-    private void Awake()
-    {
-        if (_instance == null)
-        {
-            _instance = this;
-        }
-        else
-        {
-            Destroy(this);
-        }
-    }
-    private void OnDestroy()
-    {
-        _instance = null;
-    }
-
-    public void Initialize()
+    [Inject]
+    public void Initialize(GridPathfinder pathfinder, MyGrid grid)
     {
         var disposables = new CompositeDisposable();
-        _pathfinder = GridPathfinder.Instance;
-        _grid = MyGrid.Instance;
+        this.OnDestroyAsObservable().Subscribe(_ =>
+        {
+            _pathfinder = null;
+            _grid = null;
+        }).AddTo(disposables);
+
+        _pathfinder = pathfinder;
+        _grid = grid;
 
         // [UI -> Game State] Reset button reset the phase to staging
         resetButton.OnClickAsObservable().Subscribe(_ =>
@@ -87,7 +77,7 @@ public class OverlayUI : MonoBehaviour
         }).AddTo(disposables);
 
         // [Game State -> UI] Next button move the current phase to next phase
-        GridPathfinder.Instance.onPhaseChanged
+        _pathfinder.onPhaseChanged
             .Subscribe(x =>
             {
                 switch (x)

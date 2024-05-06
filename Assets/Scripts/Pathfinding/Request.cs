@@ -9,21 +9,6 @@ namespace Dustytoy.Pathfinding
     internal class ClosedList : MinHeap<INode> { }
     public class Request
     {
-        public static void InitializePool()
-        {
-            // GC alloc
-            openListPool = new ObjectPool<OpenList>();
-            closedListPool = new ObjectPool<ClosedList>();
-        }
-        public static void CleanPool()
-        {
-            // Allow GC to clean
-            openListPool = null;
-            closedListPool = null;
-        }
-        private static ObjectPool<OpenList> openListPool;
-        private static ObjectPool<ClosedList> closedListPool;
-
         public enum PathfindingStatus
         {
             Initialized,
@@ -46,12 +31,14 @@ namespace Dustytoy.Pathfinding
         private INode end;
         private CancellationToken token;
 
-        public void Initialize(INode start, INode end, CancellationToken cancellationToken = default)
+        internal void Initialize(INode start, INode end, ObjectPoolHandle<OpenList> openListHandle, ObjectPoolHandle<ClosedList> closedListHandle, CancellationToken cancellationToken = default)
         {
             this.start = start;
             this.end = end;
-            openListHandle = openListPool.Acquire(x=>x.Clear());
-            closedListHandle = closedListPool.Acquire(x => x.Clear());
+            this.openListHandle = openListHandle;
+            this.closedListHandle = closedListHandle;
+            openList = openListHandle.value;
+            closedList = closedListHandle.value;
 
             isDone = false;
             result = null;
@@ -61,7 +48,7 @@ namespace Dustytoy.Pathfinding
             token = cancellationToken;
         }
 
-        public void Clean()
+        internal void Clean()
         {
             start = null;
             end = null;
@@ -84,8 +71,6 @@ namespace Dustytoy.Pathfinding
             }
 
             pathfindingStatus = PathfindingStatus.InProgress;
-            openList = openListHandle.value;
-            closedList = closedListHandle.value;
 
             openList.Add(start);
             while (!openList.IsEmpty() && !token.IsCancellationRequested)
@@ -159,8 +144,6 @@ namespace Dustytoy.Pathfinding
             return Observable.Create<StreamData> (observer =>
             {
                 pathfindingStatus = PathfindingStatus.InProgress;
-                openList = openListHandle.value;
-                closedList = closedListHandle.value;
 
                 openList.Add(start);
                 observer.OnNext(new StreamData(NodeAction.Start, start));
@@ -230,8 +213,6 @@ namespace Dustytoy.Pathfinding
             return Observable.Create<StreamData>(observer =>
             {
                 pathfindingStatus = PathfindingStatus.InProgress;
-                openList = openListHandle.value;
-                closedList = closedListHandle.value;
                 bool addedStartNode = false;
 
                 return source.Subscribe(
