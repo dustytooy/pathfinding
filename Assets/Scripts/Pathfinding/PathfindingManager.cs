@@ -3,31 +3,27 @@ using Dustytoy.Collections;
 
 namespace Dustytoy.Pathfinding
 {
-    public static class PathfindingManager
+    public class PathfindingManager
     {
-        private static ObjectPool<Request> requestPool;
+        private ObjectPool<Request> requestPool;
+        private ObjectPool<OpenList> openListPool;
+        private ObjectPool<ClosedList> closedListPool;
 
-        public static bool Initialized { get; private set; }
-        public static void InitializePool()
+        public PathfindingManager()
         {
-            // GC alloc
             requestPool = new ObjectPool<Request>();
-            Pathfinding.Request.InitializePool();
-            Initialized = true;
-        }
-        public static void CleanPool()
-        {
-            // Allow GC to clean
-            requestPool = null;
-            Pathfinding.Request.CleanPool();
-            Initialized = false;
+            openListPool = new ObjectPool<OpenList>();
+            closedListPool = new ObjectPool<ClosedList>();
         }
 
-        public static (ObjectPoolHandle<Request>,Request) Request(INode start, INode end, CancellationToken cancellationToken = default)
+        public (ObjectPoolHandle<Request>,Request) Request(INode start, INode end, CancellationToken cancellationToken = default)
         {
             var request = requestPool.Acquire(
-                x=>x.Initialize(start, end, cancellationToken), 
-                x=>x.Clean());
+                req=>req.Initialize(start, end, 
+                openListPool.Acquire(x => x.Clear()), 
+                closedListPool.Acquire(x => x.Clear()), 
+                cancellationToken), 
+                req=>req.Clean());
             return (request, request.value);
         }
     }

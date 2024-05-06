@@ -1,11 +1,10 @@
 using UnityEngine;
 using UniRx;
+using UniRx.Triggers;
+using Dustytoy.DI;
 
 public class MyGrid : MonoBehaviour
 {
-    public static MyGrid Instance { get { return _instance; } }
-    private static MyGrid _instance;
-
     public int width, height;
     [SerializeField]
     private RectTransform canvas;
@@ -18,28 +17,16 @@ public class MyGrid : MonoBehaviour
 
     private GridPathfinder _pathfinder;
 
-    private void Awake()
+    [Inject]
+    public void Initialize(GridPathfinder pathfinder)
     {
-        if (_instance == null)
-        {
-            _instance = this;
-        }
-        else
-        {
-            Destroy(this);
-        }
-    }
-
-    private void OnDestroy()
-    {
-        _instance = null;
-    }
-
-    public void Initialize()
-    {
-        _pathfinder = GridPathfinder.Instance;
-
         var disposables = new CompositeDisposable();
+        this.OnDestroyAsObservable().Subscribe(_ =>
+        {
+            _pathfinder = null;
+        }).AddTo(disposables);
+
+        _pathfinder = pathfinder;
 
         canvas.sizeDelta = new Vector2(width, height) * MyCell.size;
         canvas.position = transform.position + new Vector3(width * 0.5f, 0, height * 0.5f) * MyCell.size;
@@ -56,12 +43,14 @@ public class MyGrid : MonoBehaviour
                 var go = Instantiate(cellUIPrefab, center, canvas.rotation, canvas);
                 go.name = $"{x}:{y}";
                 int i = y * width + x;
+
+                // TODO: DI and Factory
                 var cell = cells[i] = go.GetComponent<MyCell>();
                 var ui = go.GetComponent<CellUI>();
 
-                // Allow Start() in UI and cell components to initialize
                 Observable.NextFrame().Subscribe(_ =>
                 {
+                    cell.Initialize();
                     cell.position = new Vector2(center.x, center.z);
                     cell.gCost.CombineLatest(cell.hCost, (x, y) => new Vector2Int(x, y)).Subscribe(ui.UpdateCost).AddTo(disposables);
                     cell.state.Subscribe(ui.UpdateColor).AddTo(disposables);
@@ -69,7 +58,7 @@ public class MyGrid : MonoBehaviour
 
                     ui.OnClick(() =>
                     {
-                        GridPathfinder.Instance.clickedCell.Value = cell;
+                        _pathfinder.clickedCell.Value = cell;
                     }).AddTo(disposables);
                 });
             }

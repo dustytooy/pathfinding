@@ -2,8 +2,10 @@ using System;
 using System.Threading;
 using UnityEngine;
 using UniRx;
+using UniRx.Triggers;
 using Dustytoy.Pathfinding;
 using Dustytoy.Pathfinding.Grid;
+using Dustytoy.DI;
 using Grid = Dustytoy.Pathfinding.Grid.Grid;
 
 public class GridPathfinder : MonoBehaviour
@@ -13,8 +15,6 @@ public class GridPathfinder : MonoBehaviour
     [SerializeField]
     private bool displayGizmos;
 
-    public static GridPathfinder Instance { get { return _instance; } }
-    private static GridPathfinder _instance;
     private CancellationTokenSource _cancellationTokenSource;
 
     public enum Phase : int
@@ -41,42 +41,30 @@ public class GridPathfinder : MonoBehaviour
     private Vector3[] _path = null;
 
     private Grid _pathGrid;
+    private PathfindingManager _pathfinding;
 
-    private void Awake()
+    [Inject]
+    public void Initialize(PathfindingManager pathfinding)
     {
-        if(_instance == null)
+        var disposables = new CompositeDisposable();
+        this.OnDestroyAsObservable().Subscribe(_ =>
         {
-            _instance = this;
-        }
-        else
-        {
-            Destroy(this);
-        }
-    }
+            _pathfinding = null;
+            _pathGrid = null;
+            _path = null;
+            _start = null;
+            _end = null;
+        }).AddTo(disposables);
 
-    private void OnDestroy()
-    {
-        PathfindingManager.CleanPool();
-        _pathGrid = null;
-        _path = null;
-        _start = null;
-        _end = null;
-        _instance = null;
-    }
-
-    public void Initialize()
-    {
-        PathfindingManager.InitializePool();
+        _pathfinding = pathfinding;
         _pathGrid = new Grid();
 
-        phase = new ReactiveProperty<Phase>(Phase.SelectStartAndEndPositions).AddTo(this);
-        clickedCell = new ReactiveProperty<MyCell>().AddTo(this);
-        mode = new ReactiveProperty<Mode>(Mode.TimeStep).AddTo(this);
-        intervalInSeconds = new ReactiveProperty<float>(0.2f).AddTo(this);
-        _clickCount = new ReactiveProperty<int>(0).AddTo(this);
+        phase = new ReactiveProperty<Phase>(Phase.SelectStartAndEndPositions).AddTo(disposables);
+        clickedCell = new ReactiveProperty<MyCell>().AddTo(disposables);
+        mode = new ReactiveProperty<Mode>(Mode.TimeStep).AddTo(disposables);
+        intervalInSeconds = new ReactiveProperty<float>(0.2f).AddTo(disposables);
+        _clickCount = new ReactiveProperty<int>(0).AddTo(disposables);
         onPhaseChanged = phase.DistinctUntilChanged();
-
-        var disposables = new CompositeDisposable();
 
         // TODO: Refactor state/phase management
         onPhaseChanged.Skip(1).Subscribe(x =>
@@ -189,7 +177,7 @@ public class GridPathfinder : MonoBehaviour
 
         // Initialize request
         _cancellationTokenSource = new CancellationTokenSource();
-        var (handle, request) = PathfindingManager.Request(start, end, _cancellationTokenSource.Token);
+        var (handle, request) = _pathfinding.Request(start, end, _cancellationTokenSource.Token);
 
         // Initialize step stream
         IObservable<Unit> stepStream;
