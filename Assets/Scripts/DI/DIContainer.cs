@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 
-namespace DustyToy.DI
+namespace Dustytoy.DI
 {
     // Reference https://qiita.com/ogix/items/0e6e98a058a608cf712c
     public class DIContainer

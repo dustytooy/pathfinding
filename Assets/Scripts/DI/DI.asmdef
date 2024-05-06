@@ -1,6 +1,6 @@
 {
     "name": "DI",
-    "rootNamespace": "DustyToy.DI",
+    "rootNamespace": "Dustytoy.DI",
     "references": [],
     "includePlatforms": [],
     "excludePlatforms": [],
