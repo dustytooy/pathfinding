@@ -4,9 +4,13 @@ using System.Reflection;
 
 namespace Dustytoy.DI
 {
-    // Reference https://qiita.com/ogix/items/0e6e98a058a608cf712c
     public class DIContainer
     {
+        public static readonly InvalidOperationException DifferentLifetimeException = new InvalidOperationException("Can not register with different lifetime!");
+        public static readonly InvalidOperationException SingletonAlreadyExistsException = new InvalidOperationException("Can not register singleton with more than one value!");
+        public static readonly InvalidOperationException AbstractInterfaceAsImplementation = new InvalidOperationException("Can not use abstract or interface as implementation!");
+        public static readonly KeyNotFoundException KeyNotFoundException = new KeyNotFoundException();
+
         public enum Lifetime
         {
             Singleton, // Always same instance
@@ -24,86 +28,106 @@ namespace Dustytoy.DI
             }
         }
 
-        private readonly Dictionary<Type, Value> _container = new Dictionary<Type, Value>();
+        private readonly IDictionary<Type, Value> _container = new Dictionary<Type, Value>();
 
-        private static readonly DIContainer _instance = new DIContainer();
-        public static DIContainer Instance => _instance;
-
-        public void Register<T>(Lifetime lifetime) where T : class, new()
+        public void Register<TContract, TImplementation>(Lifetime lifetime) where TImplementation : new()
         {
-            var type = typeof(T);
-            if(_container.TryGetValue(type, out Value value))
+            var type = typeof(TContract);
+            if(!_container.TryGetValue(type, out Value val))
             {
-                if(value.Lifetime == Lifetime.Singleton)
+                var implType = typeof(TImplementation);
+                if(implType.IsAbstract || implType.IsInterface)
                 {
-                    return;
+                    throw AbstractInterfaceAsImplementation;
                 }
-
-                var ins = new T();
-                _container.Add(type, new Value(lifetime, ins));
-            }
-        }
-
-        public void Register<T>(T ins, Lifetime lifetime)
-        {
-            var type = typeof(T);
-            if(_container.TryGetValue(type, out Value value))
-            {
-                if(value.Lifetime == Lifetime.Singleton)
-                {
-                    return;
-                }
-
-                value.Lifetime = lifetime;
-                value.Instance = ins;
+                val = new Value(lifetime, new TImplementation());
+                _container.Add(type, val);
             }
             else
             {
-                _container.Add(type, new Value(lifetime, ins));
+                if (lifetime != val.Lifetime)
+                {
+                    throw DifferentLifetimeException;
+                }
+                if (lifetime == Lifetime.Singleton)
+                {
+                    throw SingletonAlreadyExistsException;
+                }
             }
         }
-
-        public void Unregister<T>() where T : class
+        public void RegisterAsSingleton<TContract, TImplementation>() where TImplementation : new() => Register<TContract, TImplementation>(Lifetime.Singleton);
+        public void RegisterAsTransient<TContract, TImplementation>() where TImplementation : new() => Register<TContract, TImplementation>(Lifetime.Transient);
+        public void Register<T>(T instance, Lifetime lifetime) where T : new()
         {
-            _container.Remove(typeof(T));
+            var type = typeof(T);
+            if(!_container.TryGetValue(type, out Value val))
+            {
+                val = new Value(lifetime, instance);
+                _container.Add(type, val);
+            }
+            else
+            {
+                if (lifetime != val.Lifetime)
+                {
+                    throw DifferentLifetimeException;
+                }
+                if(lifetime == Lifetime.Singleton)
+                {
+                    throw SingletonAlreadyExistsException;
+                }
+            }
         }
+        public void RegisterAsSingleton<T>(T instance) where T : new() => Register<T>(instance, Lifetime.Singleton);
+        public void RegisterAsTransient<T>(T instance) where T : new() => Register<T>(instance, Lifetime.Transient);
 
+        public bool Unregister<T>()
+        {
+            return _container.Remove(typeof(T));
+        }
         public void UnregisterAll()
         {
             _container.Clear();
         }
 
-        public T Resolve<T>() where T : class
+        public object Resolve(Type type)
         {
-            if (_container.TryGetValue(typeof(T), out Value value))
+            if (_container.TryGetValue(type, out Value value))
             {
-                return (T)value.Instance;
+                return value.Instance;
             }
-            return default;
+            throw KeyNotFoundException;
         }
+        public T Resolve<T>() => (T)Resolve(typeof(T));
 
         public void Inject(object target)
         {
             // Get all fields of target object
             var fields = target.GetType()
-                .GetFields(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+                .GetFields(BindingFlags.Static | BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
 
             foreach(var field in fields)
             {
                 // Only target fields with [Inject] attribute
                 var injectAttributes = field.GetCustomAttributes(typeof(InjectAttribute), true);
+
                 if (injectAttributes.Length <= 0)
                 {
                     continue;
+                }
+
+                try
+                {
+                    field.SetValue(target, Resolve(field.GetType()));
+                }
+                catch (KeyNotFoundException)
+                {
+                    throw KeyNotFoundException;
                 }
 
                 if(!_container.TryGetValue(field.FieldType, out Value value))
                 {
                     continue;
                 }
-
-                // Inject dependency
-                field.SetValue(target, value.Instance);
             }
         }
     }
