@@ -2,7 +2,7 @@
 
 namespace Dustytoy.DI
 {
-    [AttributeUsage(AttributeTargets.Field)]
+    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Method)]
     public class InjectAttribute : Attribute
     {
     }

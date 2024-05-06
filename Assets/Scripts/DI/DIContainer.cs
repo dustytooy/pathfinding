@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 
 namespace Dustytoy.DI
@@ -27,7 +28,6 @@ namespace Dustytoy.DI
                 Instance = instance;
             }
         }
-
         private readonly IDictionary<Type, Value> _container = new Dictionary<Type, Value>();
 
         public void Register<TContract, TImplementation>(Lifetime lifetime) where TImplementation : new()
@@ -40,7 +40,7 @@ namespace Dustytoy.DI
                 {
                     throw AbstractInterfaceAsImplementation;
                 }
-                val = new Value(lifetime, new TImplementation());
+                val = new Value(lifetime, TypeUtilities.New<TImplementation>.Instance());
                 _container.Add(type, val);
             }
             else
@@ -57,6 +57,32 @@ namespace Dustytoy.DI
         }
         public void RegisterAsSingleton<TContract, TImplementation>() where TImplementation : new() => Register<TContract, TImplementation>(Lifetime.Singleton);
         public void RegisterAsTransient<TContract, TImplementation>() where TImplementation : new() => Register<TContract, TImplementation>(Lifetime.Transient);
+        public void Register<T>(Lifetime lifetime) where T : new()
+        {
+            var type = typeof(T);
+            if (!_container.TryGetValue(type, out Value val))
+            {
+                if (type.IsAbstract || type.IsInterface)
+                {
+                    throw AbstractInterfaceAsImplementation;
+                }
+                val = new Value(lifetime, TypeUtilities.New<T>.Instance());
+                _container.Add(type, val);
+            }
+            else
+            {
+                if (lifetime != val.Lifetime)
+                {
+                    throw DifferentLifetimeException;
+                }
+                if (lifetime == Lifetime.Singleton)
+                {
+                    throw SingletonAlreadyExistsException;
+                }
+            }
+        }
+        public void RegisterAsSingleton<T>() where T : new() => Register<T>(Lifetime.Singleton);
+        public void RegisterAsTransient<T>() where T : new() => Register<T>(Lifetime.Transient);
         public void Register<T>(T instance, Lifetime lifetime) where T : new()
         {
             var type = typeof(T);
@@ -101,6 +127,12 @@ namespace Dustytoy.DI
 
         public void Inject(object target)
         {
+            InjectFields(target);
+            InjectMethods(target);
+        }
+        public void Inject<T>() => Inject(Resolve<T>());
+        public void InjectFields(object target)
+        {
             // Get all fields of target object
             var fields = target.GetType()
                 .GetFields(BindingFlags.Static | BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
@@ -123,10 +155,33 @@ namespace Dustytoy.DI
                 {
                     throw KeyNotFoundException;
                 }
+            }
+        }
 
-                if(!_container.TryGetValue(field.FieldType, out Value value))
+        public void InjectMethods(object target)
+        {
+            // Get all fields of target object
+            var methods = target.GetType()
+                .GetMethods(BindingFlags.Static | BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+
+            foreach (var method in methods)
+            {
+                // Only target fields with [Inject] attribute
+                var injectAttributes = method.GetCustomAttributes(typeof(InjectAttribute), true);
+
+                if (injectAttributes.Length <= 0)
                 {
                     continue;
+                }
+
+                try
+                {
+                    var parameters = method.GetParameters().Select(x => Resolve(x.ParameterType)).ToArray();
+                    method.Invoke(target, parameters);
+                }
+                catch (KeyNotFoundException)
+                {
+                    throw KeyNotFoundException;
                 }
             }
         }
