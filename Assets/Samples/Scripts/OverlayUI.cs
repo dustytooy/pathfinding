@@ -5,7 +5,7 @@ using UniRx;
 using UniRx.Triggers;
 using Dustytoy.DI;
 
-namespace Dustytoy.Samples
+namespace Dustytoy.Samples.Grid2D
 {
     public class OverlayUI : MonoBehaviour
     {

@@ -3,7 +3,7 @@ using Dustytoy.DI;
 using Dustytoy.Pathfinding;
 using Dustytoy.Collections;
 
-namespace Dustytoy.Samples
+namespace Dustytoy.Samples.Grid2D
 {
     public class Bootstrap : MonoBehaviour
     {

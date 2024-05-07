@@ -9,7 +9,7 @@ using Dustytoy.DI;
 
 using Grid = Dustytoy.Pathfinding.Grid.Grid;
 
-namespace Dustytoy.Samples
+namespace Dustytoy.Samples.Grid2D
 {
     public class GridPathfinder : MonoBehaviour
     {

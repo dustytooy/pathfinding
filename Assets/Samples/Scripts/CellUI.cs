@@ -4,7 +4,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using UniRx;
 
-namespace Dustytoy.Samples
+namespace Dustytoy.Samples.Grid2D
 {
     public class CellUI : MonoBehaviour
     {
