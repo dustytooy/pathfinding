@@ -5,8 +5,9 @@ using UniRx;
 using UniRx.Triggers;
 using Dustytoy.Pathfinding;
 using Dustytoy.Pathfinding.Grid;
-using Grid = Dustytoy.Pathfinding.Grid.Grid;
 using Dustytoy.DI;
+
+using Grid = Dustytoy.Pathfinding.Grid.Grid;
 
 public class GridPathfinder : MonoBehaviour
 {
@@ -40,10 +41,10 @@ public class GridPathfinder : MonoBehaviour
     private ReactiveProperty<int> _clickCount;
     private Vector3[] _path = null;
 
-    private IPathfindingService _pathfindingService;
+    private IPathfindingRequestProvider _pathfindingService;
 
     [Inject]
-    public void Initialize(IPathfindingService pathfinding)
+    public void Initialize(IPathfindingRequestProvider pathfinding)
     {
         var disposables = new CompositeDisposable();
         this.OnDestroyAsObservable().Subscribe(_ =>
@@ -157,31 +158,30 @@ public class GridPathfinder : MonoBehaviour
     public void Pathfinding()
     {
         // Convert data
+        var pathfindingGrid = new Grid(grid.width, grid.height);
         var goalPosition = CellUtilities.PositionToInt(_end.position, MyCell.size);
-        // TODO: DI
-        var _pathfindingGrid = new Grid(grid.width, grid.height);
 
-        ICell[] cells = _pathfindingGrid.cells = Array.ConvertAll(grid.cells, x => 
+        pathfindingGrid.cells = Array.ConvertAll(grid.cells, x => 
         {
             var position = CellUtilities.PositionToInt(x.position, MyCell.size);
             return new Cell( 
                 position.x, position.y,
                 x.terrain.Value == MyCell.Terrain.Obstacle, 
-                _pathfindingGrid,
+                pathfindingGrid,
                 goalPosition.x, goalPosition.y);
         });
-        if(!_pathfindingGrid.IsValidPosition(goalPosition.x, goalPosition.y))
+        if(!pathfindingGrid.IsValidPosition(goalPosition.x, goalPosition.y))
         {
             throw new InvalidOperationException("Invalid position to pathfind!");
         }
 
-        INode start = _pathfindingGrid.PositionToCell(_start.position, MyCell.size);
-        INode end = _pathfindingGrid.PositionToCell(_end.position, MyCell.size);
+        INode start = pathfindingGrid.PositionToCell(_start.position, MyCell.size);
+        INode end = pathfindingGrid.PositionToCell(_end.position, MyCell.size);
         INode[] path;
 
         // Initialize request
         _cancellationTokenSource = new CancellationTokenSource();
-        var (handle, request) = _pathfindingService.Request(start, end, _cancellationTokenSource.Token);
+        var (handle, request) = _pathfindingService.New(start, end, _cancellationTokenSource.Token);
 
         // Initialize step stream
         IObservable<Unit> stepStream;

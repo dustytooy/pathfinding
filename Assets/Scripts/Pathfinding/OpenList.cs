@@ -6,6 +6,6 @@ namespace Dustytoy.Pathfinding
     {
         public bool isEmpty => IsEmpty();
 
-        public bool Contains(INode node) => Contains(node);
+        public bool Contains(INode node) => Contains(node, 0);
     }
 }

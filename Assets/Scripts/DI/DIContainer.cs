@@ -129,7 +129,7 @@ namespace Dustytoy.DI
         {
             InjectFields(target);
             InjectMethods(target);
-            //InjectProperties(target);
+            InjectProperties(target);
         }
         public void Inject<T>() => Inject(Resolve<T>());
         public void InjectFields(object target)

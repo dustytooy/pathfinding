@@ -70,6 +70,8 @@ namespace Dustytoy.Pathfinding.Grid
                     bool corner = (i == -1 && j == -1) || (i == -1 && j == 1) || (i == 1 && j == -1) || (i == 1 && j == 1);
                     int newX = xCoordinate + i;
                     int newY = yCoordinate + j;
+                    if (!_grid.IsValidPosition(newX, newY))
+                        continue;
                     var newCell = _grid.GetCell(newX, newY);
                     if (corner)
                     {

@@ -9,21 +9,27 @@ public class Bootstrap : MonoBehaviour
     private void Start()
     {
         // Usecases
-        container.RegisterAsSingleton<IObjectPool<IPathfindingRequestPoolable>, ObjectPool<PathfindingRequestPoolable>>();
-        container.RegisterAsSingleton<IObjectPool<IOpenListPoolable>, ObjectPool<OpenListPoolable>>();
-        container.RegisterAsSingleton<IObjectPool<IClosedListPoolable>, ObjectPool<ClosedListPoolable>>();
-        container.RegisterAsSingleton<IPathfindingService, PathfindingService>();
+        container.RegisterAsSingleton<IObjectPool<PathfindingRequest>, ObjectPool<PathfindingRequest>>();
+        container.RegisterAsSingleton<IObjectPool<OpenList>, ObjectPool<OpenList>>();
+        container.RegisterAsSingleton<IObjectPool<ClosedList>, ObjectPool<ClosedList>>();
+
+        container.RegisterAsSingleton<IOpenListProvider, OpenListProvider>();
+        container.RegisterAsSingleton<IClosedListProvider, ClosedListProvider>();
+        container.RegisterAsSingleton<IPathfindingRequestProvider, PathfindingRequestProvider>();
+
+        container.Inject<IOpenListProvider>();
+        container.Inject<IClosedListProvider>();
+        container.Inject<IPathfindingRequestProvider>();
 
         // Presenters and Views
         container.RegisterAsSingleton(FindObjectOfType<GridPathfinder>());
         container.RegisterAsSingleton(FindObjectOfType<MyGrid>());
         container.RegisterAsSingleton(FindObjectOfType<OverlayUI>());
 
-        container.Inject<IPathfindingService>();
+
         container.Inject<GridPathfinder>();
         container.Inject<MyGrid>();
         container.Inject<OverlayUI>();
-
     }
 
     private void OnDestroy()
