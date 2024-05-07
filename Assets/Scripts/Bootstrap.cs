@@ -1,17 +1,25 @@
 using UnityEngine;
 using Dustytoy.DI;
 using Dustytoy.Pathfinding;
+using Dustytoy.Collections;
 
 public class Bootstrap : MonoBehaviour
 {
     public static readonly DIContainer container = new DIContainer();
     private void Start()
     {
-        container.Register<PathfindingManager>(DIContainer.Lifetime.Singleton);
-        container.Register(FindObjectOfType<GridPathfinder>(), DIContainer.Lifetime.Singleton);
-        container.Register(FindObjectOfType<MyGrid>(), DIContainer.Lifetime.Singleton);
-        container.Register(FindObjectOfType<OverlayUI>(), DIContainer.Lifetime.Singleton);
+        // Usecases
+        container.RegisterAsSingleton<IObjectPool<IPathfindingRequestPoolable>, ObjectPool<PathfindingRequestPoolable>>();
+        container.RegisterAsSingleton<IObjectPool<IOpenListPoolable>, ObjectPool<OpenListPoolable>>();
+        container.RegisterAsSingleton<IObjectPool<IClosedListPoolable>, ObjectPool<ClosedListPoolable>>();
+        container.RegisterAsSingleton<IPathfindingService, PathfindingService>();
 
+        // Presenters and Views
+        container.RegisterAsSingleton(FindObjectOfType<GridPathfinder>());
+        container.RegisterAsSingleton(FindObjectOfType<MyGrid>());
+        container.RegisterAsSingleton(FindObjectOfType<OverlayUI>());
+
+        container.Inject<IPathfindingService>();
         container.Inject<GridPathfinder>();
         container.Inject<MyGrid>();
         container.Inject<OverlayUI>();

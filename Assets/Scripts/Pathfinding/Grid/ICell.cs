@@ -1,9 +1,6 @@
-using UnityEngine;
-
 namespace Dustytoy.Pathfinding.Grid
 {
-    public interface IHasGridPosition : INode
+    public interface ICell : INode, IHas2DPosition, ICanBeObstacle
     {
-        public Vector2Int position { get; }
     }
 }

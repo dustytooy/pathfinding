@@ -3,57 +3,86 @@ using System.Collections.Generic;
 
 namespace Dustytoy.Collections
 {
-    public struct ObjectPoolHandle<T> where T : new()
+    public interface IObjectPool<T> where T : IObjectPoolItem
     {
-        public T value;
-        private ObjectPool<T> _pool;
-        private Action<T> _onReleased;
-        internal ObjectPoolHandle(T value, ObjectPool<T> pool,
-            Action<T> onReleased = null)
+        public ObjectPoolItemHandle Acquire();
+        public ObjectPoolItemHandle Acquire(Action<IObjectPoolItem> onAcquired = null, Action<IObjectPoolItem> onReleased = null);
+        public void Release(T value);
+    }
+
+    public interface IObjectPoolItem
+    {
+        public object instance { get; set; }
+    }
+
+    public struct ObjectPoolItemHandle : IDisposable
+    {
+        public IObjectPoolItem item;
+        private IObjectPool<IObjectPoolItem> _pool;
+        private Action<IObjectPoolItem> _onReleased;
+
+        public ObjectPoolItemHandle(IObjectPoolItem item, IObjectPool<IObjectPoolItem> pool, Action<IObjectPoolItem> onReleased = null)
         {
-            this.value = value;
+            this.item = item;
             _pool = pool;
             _onReleased = onReleased;
         }
 
-        public void Release()
+        public void Dispose()
         {
-            _pool.Release(value);
-            _onReleased?.Invoke(value);
+            _pool.Release(item);
+            _onReleased?.Invoke(item);
         }
     }
-    public class ObjectPool<T> where T : new()
+
+    public class ObjectPool<T> : IObjectPool<T> where T : IObjectPoolItem, new()
     {
-        public List<T> elements { get; private set; }
+        public List<IObjectPoolItem> elements { get; private set; }
+        private IObjectPool<IObjectPoolItem> _self;
 
         public ObjectPool()
         {
-            elements = new List<T>();
+            _self = this as IObjectPool<IObjectPoolItem>;
+            elements = new List<IObjectPoolItem>();
         }
 
         public ObjectPool(int initialCapacity = 0)
         {
-            elements = new List<T>(initialCapacity);
+            _self = this as IObjectPool<IObjectPoolItem>;
+            elements = new List<IObjectPoolItem>(initialCapacity);
         }
 
-        public ObjectPoolHandle<T> Acquire(Action<T> onAcquired = null, Action<T> onReleased = null)
+        public ObjectPoolItemHandle Acquire()
+        {
+            int count = elements.Count;
+            if (count == 0)
+            {
+                T newValue = new T();
+                return new ObjectPoolItemHandle(newValue, _self);
+            }
+            var pooledValue = elements[count - 1];
+            elements.RemoveAt(count - 1);
+            return new ObjectPoolItemHandle(pooledValue, _self);
+        }
+
+        public ObjectPoolItemHandle Acquire(Action<IObjectPoolItem> onAcquired = null, Action<IObjectPoolItem> onReleased = null)
         {
             int count = elements.Count;
             if (count == 0)
             {
                 T newValue = new T();
                 onAcquired?.Invoke(newValue);
-                return new ObjectPoolHandle<T>(newValue, this, onReleased);
+                return new ObjectPoolItemHandle(newValue, _self, onReleased);
             }
-            T pooledValue = elements[count - 1];
+            var pooledValue = elements[count - 1];
             elements.RemoveAt(count - 1);
             onAcquired?.Invoke(pooledValue);
-            return new ObjectPoolHandle<T>(pooledValue, this, onReleased);
+            return new ObjectPoolItemHandle(pooledValue, _self, onReleased);
         }
-        internal void Release(T element)
+
+        public void Release(T element)
         {
             elements.Add(element);
         }
-
     }
 }

@@ -1,12 +1,11 @@
 using System.Collections.Generic;
-using UnityEngine;
 
 namespace Dustytoy.Pathfinding.Grid
 {
-    public class Cell : INode
+    public class Cell : ICell
     {
-        public static readonly float size = 1f;
-        public Vector2Int position { get; set; }
+        public int xCoordinate { get; private set; }
+        public int yCoordinate { get; private set; }
 
         public int gCost { get; set; }
         public int hCost { get; set; }
@@ -14,19 +13,21 @@ namespace Dustytoy.Pathfinding.Grid
         public INode parent { get ; set; }
         public bool isObstacle { get ; set ; }
 
-        private Grid _grid;
-        private Vector2Int _goal;
+        private IGrid _grid;
+        private int _xGoalCoordinate, _yGoalCoordinate;
 
-        public Cell(Vector2Int position, bool isObstacle, Grid grid, Vector2Int goal)
+        public Cell(int x, int y, bool isObstacle, IGrid grid, int xGoalCoordinate, int yGoalCoordinate)
         {
-            this.position = position;
+            this.xCoordinate = x;
+            this.yCoordinate = y;
             this.isObstacle = isObstacle;
             gCost = 0;
             hCost = int.MaxValue;
             parent = null;
 
             _grid = grid;
-            _goal = goal;
+            _xGoalCoordinate = xGoalCoordinate;
+            _yGoalCoordinate = yGoalCoordinate;
         }
 
         public bool Equals(INode other)
@@ -34,7 +35,7 @@ namespace Dustytoy.Pathfinding.Grid
             if(other == null) { return false; }
             if(other is Cell cell)
             {
-                return position == cell.position;
+                return xCoordinate == cell.xCoordinate && yCoordinate == cell.yCoordinate;
             }
             return false;
         }
@@ -58,7 +59,7 @@ namespace Dustytoy.Pathfinding.Grid
 
         public INode[] GetNeighbors()
         {
-            var neighbors = new List<Cell>();
+            var neighbors = new List<ICell>();
 
             for (int i = -1; i <= 1; i++)
             {
@@ -67,13 +68,13 @@ namespace Dustytoy.Pathfinding.Grid
                     if (i == 0 && j == 0)
                         continue;
                     bool corner = (i == -1 && j == -1) || (i == -1 && j == 1) || (i == 1 && j == -1) || (i == 1 && j == 1);
-                    int newX = position.x + i;
-                    int newY = position.y + j;
-                    var newCell = _grid[newX, newY];
+                    int newX = xCoordinate + i;
+                    int newY = yCoordinate + j;
+                    var newCell = _grid.GetCell(newX, newY);
                     if (corner)
                     {
-                        var horizontal = _grid[position.x, newY];
-                        var vertical = _grid[newX, position.y];
+                        var horizontal = _grid.GetCell(xCoordinate, newY);
+                        var vertical = _grid.GetCell(newX, yCoordinate);
                         if((horizontal != null && horizontal.isObstacle) &&
                            (vertical != null && vertical.isObstacle))
                         {
@@ -105,23 +106,28 @@ namespace Dustytoy.Pathfinding.Grid
 
         public int CalculateGCost(INode from)
         {
-            var fromCell = from as Cell;
-            return from.gCost + Mathf.FloorToInt((fromCell.position - position).magnitude * 10f);
+            var fromCell = from as ICell;
+            return from.gCost + (int)(DistanceFrom(this, fromCell) * 10f);
         }
 
         public int CalculateHCost()
         {
-            float dx = Mathf.Abs(position.x - _goal.x);
-            float dy = Mathf.Abs(position.y - _goal.y);
-
-            return Mathf.FloorToInt(size * (dx + dy + (Mathf.Sqrt(2f) - 2) * Mathf.Min(dx, dy)) * 10f);
+            float dx = xCoordinate - _xGoalCoordinate;
+            dx = dx < 0 ? -dx : dx;
+            float dy = yCoordinate - _yGoalCoordinate;
+            dy = dy < 0 ? -dy : dy;
+            float min = dx < dy ? dx : dy;
+            return (int)((dx + dy + 1.414f - 2f) * min * 10f);
         }
 
-        public static Vector2Int PositionToInt(Vector2 position)
+        private static float SqrDistanceFrom(ICell from, ICell to)
         {
-            int x = (int)(position.x / size);
-            int y = (int)(position.y / size);
-            return new Vector2Int(x, y);
+            return (from.xCoordinate - to.xCoordinate) * (from.xCoordinate - to.xCoordinate) +
+                (from.yCoordinate - to.yCoordinate) * (from.yCoordinate - to.yCoordinate);
+        }
+        private static float DistanceFrom(ICell from, ICell to)
+        {
+            return System.MathF.Sqrt(SqrDistanceFrom(from, to));
         }
     }
 }

@@ -5,8 +5,8 @@ using UniRx;
 using UniRx.Triggers;
 using Dustytoy.Pathfinding;
 using Dustytoy.Pathfinding.Grid;
-using Dustytoy.DI;
 using Grid = Dustytoy.Pathfinding.Grid.Grid;
+using Dustytoy.DI;
 
 public class GridPathfinder : MonoBehaviour
 {
@@ -40,24 +40,21 @@ public class GridPathfinder : MonoBehaviour
     private ReactiveProperty<int> _clickCount;
     private Vector3[] _path = null;
 
-    private Grid _pathGrid;
-    private PathfindingManager _pathfinding;
+    private IPathfindingService _pathfindingService;
 
     [Inject]
-    public void Initialize(PathfindingManager pathfinding)
+    public void Initialize(IPathfindingService pathfinding)
     {
         var disposables = new CompositeDisposable();
         this.OnDestroyAsObservable().Subscribe(_ =>
         {
-            _pathfinding = null;
-            _pathGrid = null;
+            _pathfindingService = null;
             _path = null;
             _start = null;
             _end = null;
         }).AddTo(disposables);
 
-        _pathfinding = pathfinding;
-        _pathGrid = new Grid();
+        _pathfindingService = pathfinding;
 
         phase = new ReactiveProperty<Phase>(Phase.SelectStartAndEndPositions).AddTo(disposables);
         clickedCell = new ReactiveProperty<MyCell>().AddTo(disposables);
@@ -159,25 +156,32 @@ public class GridPathfinder : MonoBehaviour
 
     public void Pathfinding()
     {
-        // Initialize data
-        Cell[] cells = Array.ConvertAll(grid.cells, x => 
+        // Convert data
+        var goalPosition = CellUtilities.PositionToInt(_end.position, MyCell.size);
+        // TODO: DI
+        var _pathfindingGrid = new Grid(grid.width, grid.height);
+
+        ICell[] cells = _pathfindingGrid.cells = Array.ConvertAll(grid.cells, x => 
         {
-            return new Cell(
-                Cell.PositionToInt(x.position), 
+            var position = CellUtilities.PositionToInt(x.position, MyCell.size);
+            return new Cell( 
+                position.x, position.y,
                 x.terrain.Value == MyCell.Terrain.Obstacle, 
-                _pathGrid,
-                Cell.PositionToInt(_end.position));
+                _pathfindingGrid,
+                goalPosition.x, goalPosition.y);
         });
-        _pathGrid.Initialize(grid.width, grid.height, cells, _end.position);
+        if(!_pathfindingGrid.IsValidPosition(goalPosition.x, goalPosition.y))
+        {
+            throw new InvalidOperationException("Invalid position to pathfind!");
+        }
 
-
-        INode start = _pathGrid.PositionToCell(_start.position);
-        INode end = _pathGrid.PositionToCell(_end.position);
+        INode start = _pathfindingGrid.PositionToCell(_start.position, MyCell.size);
+        INode end = _pathfindingGrid.PositionToCell(_end.position, MyCell.size);
         INode[] path;
 
         // Initialize request
         _cancellationTokenSource = new CancellationTokenSource();
-        var (handle, request) = _pathfinding.Request(start, end, _cancellationTokenSource.Token);
+        var (handle, request) = _pathfindingService.Request(start, end, _cancellationTokenSource.Token);
 
         // Initialize step stream
         IObservable<Unit> stepStream;
@@ -204,33 +208,32 @@ public class GridPathfinder : MonoBehaviour
         var disposable = request.ProcessStream(stepStream)
             .Finally(() =>
             {
-                handle.Release();
+                handle.Dispose();
                 _cancellationTokenSource.Dispose();
                 _cancellationTokenSource = null;
             })
             .Subscribe(
             data =>
             {
-                var c = data.node as Cell;
-                int i = c.position.y * grid.width + c.position.x;
+                var c = data.node as ICell;
+                int i = c.yCoordinate * grid.width + c.xCoordinate;
                 var cell = grid.cells[i];
 
-
-                if (data.action == Request.NodeAction.Start)
+                if (data.action == NodeAction.Start)
                 {
                     cell.state.Value = MyCell.State.Start;
                 }
-                else if (data.action == Request.NodeAction.End)
+                else if (data.action == NodeAction.End)
                 {
                     cell.state.Value = MyCell.State.End;
                 }
-                else if (data.action == Request.NodeAction.AddToOpenList && cell != _start) // comparison because starting cell is also added to open list per algo
+                else if (data.action == NodeAction.AddToOpenList && cell != _start) // comparison because starting cell is also added to open list per algo
                 {
                     cell.gCost.Value = c.gCost;
                     cell.hCost.Value = c.hCost;
                     cell.state.Value = MyCell.State.OpenList;
                 }
-                else if (data.action == Request.NodeAction.AddToClosedList && cell != _start) // comparison because starting cell is also added to open list per algo
+                else if (data.action == NodeAction.AddToClosedList && cell != _start) // comparison because starting cell is also added to open list per algo
                 {
                     cell.state.Value = MyCell.State.ClosedList;
                 }
@@ -249,7 +252,7 @@ public class GridPathfinder : MonoBehaviour
                 _path = Array.ConvertAll(path, x =>
                 {
                     var c = x as Cell;
-                    int i = c.position.y * grid.width + c.position.x;
+                    int i = c.yCoordinate * grid.width + c.xCoordinate;
                     var cell = grid.cells[i];
 
                     if (!start.Equals(x) && !end.Equals(x))
@@ -258,7 +261,7 @@ public class GridPathfinder : MonoBehaviour
                         cell.state.Value = MyCell.State.Path;
                     }
 
-                    var v = _pathGrid.CellToPosition(c);
+                    var v = c.CellToPosition(MyCell.size);
                     return grid.transform.position + new Vector3(v.x, 1f, v.y);
                 });
             });

@@ -129,6 +129,7 @@ namespace Dustytoy.DI
         {
             InjectFields(target);
             InjectMethods(target);
+            //InjectProperties(target);
         }
         public void Inject<T>() => Inject(Resolve<T>());
         public void InjectFields(object target)
@@ -149,7 +150,33 @@ namespace Dustytoy.DI
 
                 try
                 {
-                    field.SetValue(target, Resolve(field.GetType()));
+                    field.SetValue(target, Resolve(field.FieldType));
+                }
+                catch (KeyNotFoundException)
+                {
+                    throw KeyNotFoundException;
+                }
+            }
+        }
+        public void InjectProperties(object target)
+        {
+            // Get all fields of target object
+            var properties = target.GetType()
+                .GetProperties(BindingFlags.Static | BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+
+            foreach (var property in properties)
+            {
+                // Only target fields with [Inject] attribute
+                var injectAttributes = property.GetCustomAttributes(typeof(InjectAttribute), true);
+
+                if (injectAttributes.Length <= 0)
+                {
+                    continue;
+                }
+
+                try
+                {
+                    property.SetValue(target, Resolve(property.PropertyType));
                 }
                 catch (KeyNotFoundException)
                 {

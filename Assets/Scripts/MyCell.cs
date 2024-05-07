@@ -1,6 +1,5 @@
 using UnityEngine;
 using UniRx;
-using Dustytoy.Pathfinding.Grid;
 
 public class MyCell : MonoBehaviour
 {
@@ -19,7 +18,7 @@ public class MyCell : MonoBehaviour
         Obstacle,
     }
     public Vector2 position { get; set; }
-    public static readonly float size = Cell.size;
+    public static readonly float size = 1f;
     public ReactiveProperty<int> gCost { get; set; }
     public ReactiveProperty<int> hCost { get; set; }
     public ReadOnlyReactiveProperty<int> fCost { get; private set; }
