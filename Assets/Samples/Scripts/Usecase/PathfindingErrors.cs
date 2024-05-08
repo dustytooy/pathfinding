@@ -1,5 +1,4 @@
 using System;
-using UnityEngine;
 
 namespace Dustytoy.Samples.Grid2D.Usecase
 {
