@@ -29,9 +29,9 @@ namespace Dustytoy.Samples.Grid2D.Usecase.Impl
                 var response = ConvertToVector2Array(request.result);
                 return response;
             }
-            catch(OperationCanceledException e)
+            catch(OperationCanceledException)
             {
-                throw PathfindingErrors.ThrowOperationCancelledException(e);
+                throw PathfindingErrors.OperationCanceledException;
             }
             finally
             {
@@ -60,9 +60,9 @@ namespace Dustytoy.Samples.Grid2D.Usecase.Impl
                     return cell.CellToPosition(cellSize);
                 });
             }
-            catch (OperationCanceledException e)
+            catch (OperationCanceledException)
             {
-                throw PathfindingErrors.ThrowOperationCancelledException(e);
+                throw PathfindingErrors.OperationCanceledException;
             }
         }
 
@@ -87,9 +87,9 @@ namespace Dustytoy.Samples.Grid2D.Usecase.Impl
                     return cell.CellToPosition(cellSize);
                 });
             }
-            catch (OperationCanceledException e)
+            catch (OperationCanceledException)
             {
-                throw PathfindingErrors.ThrowOperationCancelledException(e);
+                throw PathfindingErrors.OperationCanceledException;
             }
         }
 
@@ -112,7 +112,7 @@ namespace Dustytoy.Samples.Grid2D.Usecase.Impl
             });
             if (!pathfindingGrid.IsValidPosition(endPosition.x, endPosition.y))
             {
-                PathfindingErrors.ThrowInvalidPositionException(to);
+                throw PathfindingErrors.InvalidPositionException;
             }
 
             INode start = pathfindingGrid.PositionToCell(from, cellSize);

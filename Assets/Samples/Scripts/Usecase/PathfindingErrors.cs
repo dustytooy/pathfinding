@@ -1,25 +1,13 @@
 using System;
 using UnityEngine;
 
-namespace Dustytoy.Samples.Grid2D
+namespace Dustytoy.Samples.Grid2D.Usecase
 {
     public static class PathfindingErrors
     {
-        public static Exception ThrowInvalidPositionException(Vector2 position, Exception e = null)
-        {
-            throw new InvalidOperationException($"[Usecase] InvalidPositionException: {position.ToString()} is not a valid position on the grid!", e);
-        }
-        public static Exception ThrowStartEndNotInitializedException(Exception e = null)
-        {
-            throw new InvalidOperationException($"[Usecase] StartEndNotInitializedException: Either start or end position is not initialized!", e);
-        }
-        public static Exception ThrowGridNotInitializedException(Exception e = null)
-        {
-            throw new InvalidOperationException($"[Usecase] GridNotInitializedException: Grid is not initialized!", e);
-        }
-        public static Exception ThrowOperationCancelledException(Exception e = null)
-        {
-            throw new OperationCanceledException($"[Usecase] OperationCancelledException: Pathfinding request has been cancelled!", e);
-        }
+        public static readonly Exception InvalidPositionException = new InvalidOperationException($"[Usecase] InvalidPositionException: is not a valid position on the grid!");
+        public static readonly Exception StartEndNotInitializedException = new InvalidOperationException($"[Usecase] StartEndNotInitializedException: Either start or end position is not initialized!");
+        public static readonly Exception GridNotInitializedException = new InvalidOperationException($"[Usecase] GridNotInitializedException: Grid is not initialized!");
+        public static readonly Exception OperationCanceledException = new OperationCanceledException($"[Usecase] OperationCancelledException: Pathfinding request has been cancelled!");
     }
 }
