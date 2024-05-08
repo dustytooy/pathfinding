@@ -54,8 +54,8 @@ namespace Dustytoy.Samples.Grid2D.Usecase.Impl
                 {
                     var cell = data.node as ICell;
                     var action = data.action;
-                    int width = _configurationService.GetGridDimensions().Item1;
-                    float cellSize = _configurationService.GetCellSize();
+                    int width = _configurationService.gridWidth;
+                    float cellSize = _configurationService.cellSize;
                     int i = cell.yCoordinate * width + cell.xCoordinate;
                     return cell.CellToPosition(cellSize);
                 });
@@ -81,8 +81,8 @@ namespace Dustytoy.Samples.Grid2D.Usecase.Impl
                 {
                     var cell = data.node as ICell;
                     var action = data.action;
-                    int width = _configurationService.GetGridDimensions().Item1;
-                    float cellSize = _configurationService.GetCellSize();
+                    int width = _configurationService.gridWidth;
+                    float cellSize = _configurationService.cellSize;
                     int i = cell.yCoordinate * width + cell.xCoordinate;
                     return cell.CellToPosition(cellSize);
                 });
@@ -95,8 +95,9 @@ namespace Dustytoy.Samples.Grid2D.Usecase.Impl
 
         private (IDisposable, IPathfindingRequest) ConvertToRequest(MyCell[] cells, Vector2 from, Vector2 to, CancellationToken cancellationToken = default)
         {
-            var (width, height) = _configurationService.GetGridDimensions();
-            float cellSize = _configurationService.GetCellSize();
+            int width = _configurationService.gridWidth;
+            int height = _configurationService.gridHeight;
+            float cellSize = _configurationService.cellSize;
 
             var pathfindingGrid = new Grid(width, height);
             var endPosition = CellUtilities.PositionToInt(to, cellSize);
@@ -128,7 +129,7 @@ namespace Dustytoy.Samples.Grid2D.Usecase.Impl
         private Vector2 ConvertToVector2(INode node)
         {
             var position = node as ICell;
-            float cellSize = _configurationService.GetCellSize();
+            float cellSize = _configurationService.cellSize;
             var v = position.CellToPosition(cellSize);
             return new Vector2(v.x, v.y);
         }
