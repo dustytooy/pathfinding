@@ -216,7 +216,7 @@ namespace Dustytoy.Samples.Grid2D
                     _cancellationTokenSource = null;
                 })
                 .Subscribe(
-                data =>
+                (Action<StreamData>)(                data =>
                 {
                     var c = data.node as ICell;
                     int i = c.yCoordinate * grid.width + c.xCoordinate;
@@ -240,7 +240,7 @@ namespace Dustytoy.Samples.Grid2D
                     {
                         cell.state.Value = MyCell.State.ClosedList;
                     }
-                },
+                }),
                 (e) =>
                 {
                     if (e is OperationCanceledException)
@@ -248,11 +248,11 @@ namespace Dustytoy.Samples.Grid2D
                         Debug.LogWarning(e);
                     }
                 },
-                () =>
+                (Action)(() =>
                 {
                     path = request.result;
                     var status = request.pathfindingStatus;
-                    _path = Array.ConvertAll(path, x =>
+                    _path = Array.ConvertAll(path, (Converter<INode, Vector3>)(x =>
                     {
                         var c = x as Cell;
                         int i = c.yCoordinate * grid.width + c.xCoordinate;
@@ -266,8 +266,8 @@ namespace Dustytoy.Samples.Grid2D
 
                         var v = c.CellToPosition(MyCell.size);
                         return grid.transform.position + new Vector3(v.x, 1f, v.y);
-                    });
-                });
+                    }));
+                }));
         }
 
         public void Cancel()

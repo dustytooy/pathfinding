@@ -122,7 +122,7 @@ namespace Dustytoy.Pathfinding.Grid
             return (int)((dx + dy + 1.414f - 2f) * min * 10f);
         }
 
-        private static float SqrDistanceFrom(ICell from, ICell to)
+        private static float SqrDistanceFrom(IHas2DPosition from, IHas2DPosition to)
         {
             return (from.xCoordinate - to.xCoordinate) * (from.xCoordinate - to.xCoordinate) +
                 (from.yCoordinate - to.yCoordinate) * (from.yCoordinate - to.yCoordinate);

@@ -4,7 +4,7 @@ namespace Dustytoy.Pathfinding.Grid
     {
         public int width { get; }
         public int height { get; }
-        public ICell[] cells { get; }
+        public ICell[] cells { get; set; }
 
         public bool IsValidPosition(int x, int y);
         public ICell GetCell(int x, int y);

@@ -50,7 +50,7 @@ namespace Dustytoy.Samples.Grid2D.Usecase.Impl
                 {
                     handle.Dispose();
                 })
-                .Select(data =>
+                .Select((Func<StreamData, Vector2>)(data =>
                 {
                     var cell = data.node as ICell;
                     var action = data.action;
@@ -58,7 +58,7 @@ namespace Dustytoy.Samples.Grid2D.Usecase.Impl
                     float cellSize = _configurationService.cellSize;
                     int i = cell.yCoordinate * width + cell.xCoordinate;
                     return cell.CellToPosition(cellSize);
-                });
+                }));
             }
             catch (OperationCanceledException)
             {
@@ -77,7 +77,7 @@ namespace Dustytoy.Samples.Grid2D.Usecase.Impl
                 {
                     handle.Dispose();
                 })
-                .Select(data =>
+                .Select((Func<StreamData, Vector2>)(data =>
                 {
                     var cell = data.node as ICell;
                     var action = data.action;
@@ -85,7 +85,7 @@ namespace Dustytoy.Samples.Grid2D.Usecase.Impl
                     float cellSize = _configurationService.cellSize;
                     int i = cell.yCoordinate * width + cell.xCoordinate;
                     return cell.CellToPosition(cellSize);
-                });
+                }));
             }
             catch (OperationCanceledException)
             {
