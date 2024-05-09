@@ -23,7 +23,9 @@ namespace Dustytoy.Pathfinding.Grid
 
         public ICell GetCell(int x, int y)
         {
-            return cells[ToIndex(x, y)];
+            if(IsValidPosition(x, y))
+                return cells[ToIndex(x, y)];
+            return null;
         }
 
         public int ToIndex(int x, int y)
