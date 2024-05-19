@@ -216,7 +216,7 @@ namespace Dustytoy.Samples.Grid2D
                     _cancellationTokenSource = null;
                 })
                 .Subscribe(
-                (Action<StreamData>)(                data =>
+                (Action<StreamData>)(data =>
                 {
                     var c = data.node as ICell;
                     int i = c.yCoordinate * grid.width + c.xCoordinate;

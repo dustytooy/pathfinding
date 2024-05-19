@@ -15,6 +15,7 @@
         {
             this.width = width;
             this.height = height;
+            array = new T[width * height];
         }
 
         public virtual bool IsValidPosition(int x, int y)

@@ -6,6 +6,7 @@ namespace Dustytoy.Pathfinding.Grid
     {
         public int xCoordinate { get; private set; }
         public int yCoordinate { get; private set; }
+        public IGrid grid { get; private set; }
 
         public int gCost { get; set; }
         public int hCost { get; set; }
@@ -13,19 +14,20 @@ namespace Dustytoy.Pathfinding.Grid
         public INode parent { get ; set; }
         public bool isObstacle { get ; set ; }
 
-        private IGrid _grid;
         private int _xGoalCoordinate, _yGoalCoordinate;
 
         public Cell(int x, int y, bool isObstacle, IGrid grid, int xGoalCoordinate, int yGoalCoordinate)
         {
             this.xCoordinate = x;
             this.yCoordinate = y;
+            this.grid = grid;
+            grid.cells[grid.ToIndex(xCoordinate, yCoordinate)] = this;
+
             this.isObstacle = isObstacle;
             gCost = 0;
             hCost = int.MaxValue;
             parent = null;
 
-            _grid = grid;
             _xGoalCoordinate = xGoalCoordinate;
             _yGoalCoordinate = yGoalCoordinate;
         }
@@ -70,13 +72,13 @@ namespace Dustytoy.Pathfinding.Grid
                     bool corner = (i == -1 && j == -1) || (i == -1 && j == 1) || (i == 1 && j == -1) || (i == 1 && j == 1);
                     int newX = xCoordinate + i;
                     int newY = yCoordinate + j;
-                    if (!_grid.IsValidPosition(newX, newY))
+                    if (!grid.IsValidPosition(newX, newY))
                         continue;
-                    var newCell = _grid.GetCell(newX, newY);
+                    var newCell = grid.GetCell(newX, newY);
                     if (corner)
                     {
-                        var horizontal = _grid.GetCell(xCoordinate, newY);
-                        var vertical = _grid.GetCell(newX, yCoordinate);
+                        var horizontal = grid.GetCell(xCoordinate, newY);
+                        var vertical = grid.GetCell(newX, yCoordinate);
                         if((horizontal != null && horizontal.isObstacle) &&
                            (vertical != null && vertical.isObstacle))
                         {
@@ -122,7 +124,7 @@ namespace Dustytoy.Pathfinding.Grid
             return (int)((dx + dy + 1.414f - 2f) * min * 10f);
         }
 
-        private static float SqrDistanceFrom(IHas2DPosition from, IHas2DPosition to)
+        private static float SqrDistanceFrom(ICell from, ICell to)
         {
             return (from.xCoordinate - to.xCoordinate) * (from.xCoordinate - to.xCoordinate) +
                 (from.yCoordinate - to.yCoordinate) * (from.yCoordinate - to.yCoordinate);

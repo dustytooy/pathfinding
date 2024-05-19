@@ -1,26 +1,26 @@
 using System;
 using System.Threading;
-using Dustytoy.Pathfinding;
 using Dustytoy.DI;
+using Dustytoy.Pathfinding.Grid;
 using UniRx;
 
 namespace Dustytoy.Samples.Grid2D.Entity
 {
-    public enum State : int
-    {
-        SelectObstacles,
-        SelectStartAndEndPositions,
-        Pathfinding,
-    }
     internal interface IPathfindingController
     {
-        public IPathfindingConfiguration config { get; }
-        public IPathfindingManager pathfindingManager { get; }
-        public ITerrainCell startCell { get; set; }
-        public ITerrainCell endCell { get; set; }
+        public IPathfindingConfiguration pathfindingConfig { get; }
+        public IPathfindingService pathfindingService { get; }
+        public IPathfindingState pathfindingState { get; }
+        public IObstacleClicker obstacleClicker { get; }
+        public IStartEndClicker startEndClicker { get; }
+
+        public ITerrainCell start { get; }
+        public ITerrainCell end { get; }
         public ITerrainCell[] path { get; }
-        public IObservable<State> onStateChanged { get; }
-        public IObservable<ITerrainCell> onCellClicked { get; }
+
+        public Action<StreamData> onNext { get; set; }
+        public Action<Exception> onError { get; set; }
+        public Action onComplete { get; set; }
 
         public void Cancel();
     }
@@ -28,95 +28,57 @@ namespace Dustytoy.Samples.Grid2D.Entity
     internal class PathfindingController : IPathfindingController
     {
         [Inject]
-        public IPathfindingConfiguration config { get; private set; }
+        public IPathfindingConfiguration pathfindingConfig { get; private set; }
         [Inject]
-        public IPathfindingManager pathfindingManager { get; private set; }
-        public ITerrainCell startCell { get; set; }
-        public ITerrainCell endCell { get; set; }
+        public IPathfindingService pathfindingService { get; private set; }
+        [Inject]
+        public IPathfindingState pathfindingState { get; private set; }
+        [Inject]
+        public IObstacleClicker obstacleClicker { get; private set; }
+        [Inject]
+        public IStartEndClicker startEndClicker { get; private set; }
+
+        public ITerrainCell start => startEndClicker.start;
+        public ITerrainCell end => startEndClicker.end;
         public ITerrainCell[] path => _path;
-        // TODO: add more class for separate of concerns
-        public IObservable<State> onStateChanged { get; private set; }
-        public IObservable<ITerrainCell> onCellClicked { get; private set; }
+
+        public Action<StreamData> onNext { get; set; }
+        public Action<Exception> onError { get; set; }
+        public Action onComplete { get; set; }
 
         public IObservable<StreamData> dataStream => _dataStream;
 
         private CancellationTokenSource _cancellationTokenSource;
-        private ReactiveProperty<State> _state;
         private CompositeDisposable _disposables;
         private ITerrainCell[] _path;
         private IObservable<StreamData> _dataStream;
 
-        [Inject]
-        public void OnAwake()
+        public PathfindingController()
         {
             _disposables = new CompositeDisposable();
-            _state = new ReactiveProperty<State>(State.SelectObstacles).AddTo(_disposables);
-            onStateChanged = _state.Skip(1).DistinctUntilChanged();
-            // Cancel any current processing request
-            onStateChanged.Where(_ => _ != State.Pathfinding).Subscribe(_ =>
+            pathfindingState.onSelectObstaclesState.Subscribe(_ =>
             {
                 Cancel();
             }).AddTo(_disposables);
-            // Automatically start processing request
-            onStateChanged.DistinctUntilChanged().Where(_ => _ == State.Pathfinding).Subscribe(_ =>
+            pathfindingState.onSelectStartPositionState.Subscribe(_ =>
             {
-                if (startCell == null || endCell == null)
+                Cancel();
+            }).AddTo(_disposables);
+            pathfindingState.onPathfindingState.Subscribe(_ =>
+            {
+                if (start == null || end == null)
                 {
+                    // TODO: move can pathfind or not to usecase and remove this if guard
                     return;
                 }
-                Process();
+                Run();
             }).AddTo(_disposables);
 
-            // To add interface for switching between state [Inject]
-
-            Observable.WithLatestFrom(onCellClicked, onStateChanged, (x, y) => (x, y)).Where((tuple) => tuple.y == State.SelectObstacles).Subscribe((tuple) =>
-            {
-                var cell = tuple.x;
-                var state = tuple.y;
-                cell.terrainProperties = cell.IsObstacle() ? 
-                new TerrainProperties(TerrainProperties.Type.None) : new TerrainProperties(TerrainProperties.Type.Obstacle);
-            }).AddTo(_disposables);
-            Observable.WithLatestFrom(onCellClicked, onStateChanged, (x, y) => (x, y)).Where((tuple) => tuple.y == State.SelectStartAndEndPositions).Subscribe((tuple) =>
-            {
-                var cell = tuple.x;
-                var state = tuple.y;
-                cell.terrainProperties = cell.IsObstacle() ?
-                new TerrainProperties(TerrainProperties.Type.None) : new TerrainProperties(TerrainProperties.Type.Obstacle);
-                if (cell.IsObstacle()) { return; }
-                // Increment click count during select phase
-
-                int click = 0;
-                //click = _clickCount.Value = (_clickCount.Value + 1) % 2;
-                // Selecting positions
-                if (click == 1) // First click for start
-                {
-                    if (endCell != null)
-                    {
-                        // Reset state to none for cell
-
-                        endCell = null;
-                    }
-                    if (startCell != null)
-                    {
-                        // Reset state to none for cell
-
-                        startCell = null;
-                    }
-                    startCell = cell;
-                    // Set state to Start for cell
-
-                }
-                else if (click == 0) // Second click for end
-                {
-                    endCell = cell;
-                    // Set state to End for cell
-
-                    // Set state to atomatic pathfinding, perhaps in a different class
-                }
-            }).AddTo(_disposables);
+            // TODO: pathfinding state controlled in usecase
+            // TODO: cell clicker controlled in usecase
+            // TODO: automated process relevant to state transition
         }
-
-        public void OnDestroy()
+        ~PathfindingController()
         {
             _disposables.Dispose();
             _cancellationTokenSource.Dispose();
@@ -124,28 +86,20 @@ namespace Dustytoy.Samples.Grid2D.Entity
             _dataStream = null;
         }
 
-        public void Process()
+        public void Run()
         {
             _cancellationTokenSource = new CancellationTokenSource();
-            GetPath(startCell, endCell, out _path, out _dataStream, _cancellationTokenSource.Token);
             // When using stream
-            if(config.pathfindingMode != PathfindingMode.Instant)
+            if(pathfindingConfig.pathfindingMode != PathfindingMode.Instant)
             {
-                Action<StreamData> onNext = null;
-                Action<Exception> onError = null;
-                Action onComplete = null;
-                dataStream.Subscribe(onNext, onError, onComplete);
+                _dataStream = GetPathStream(start, end, _cancellationTokenSource.Token);
+                _dataStream.Subscribe(onNext, onError, onComplete);
+            }
+            else
+            {
+                _path = GetPath(start, end, _cancellationTokenSource.Token);
             }
         }
-
-        //public void AlternateStateDuringStaging()
-        //{
-        //    _state.Value = _state.Value == State.SelectObstacles ? State.SelectStartAndEndPositions : State.SelectObstacles;
-        //}
-        //public void ResetState()
-        //{
-        //    _state.Value = State.SelectObstacles;
-        //}
 
         public void Cancel()
         {
@@ -155,25 +109,43 @@ namespace Dustytoy.Samples.Grid2D.Entity
             }
         }
 
-        public void GetPath(ITerrainCell from, ITerrainCell to, out ITerrainCell[] result, out IObservable<StreamData> resultStream, CancellationToken cancellationToken = default)
+        public ITerrainCell[] GetPath(ITerrainCell from, ITerrainCell to, CancellationToken cancellationToken = default)
         {
-            result = null;
-            resultStream = null;
-            switch(config.pathfindingMode)
+            int width = from.grid.width;
+            int height = from.grid.height;
+            var grid =  new Grid(width, height);
+            var path = pathfindingService.GetPath(
+                ConvertToNode(from, grid, to), 
+                ConvertToNode(to, grid, to), 
+                cancellationToken);
+            ITerrainCell[] result = new ITerrainCell[path.Length];
+            for(int i = 0; i < path.Length; i++)
             {
-                case PathfindingMode.Instant:
-                    result = pathfindingManager.GetPath(from, to, cancellationToken);
-                    break;
-                case PathfindingMode.EveryFrame:
-                    resultStream = pathfindingManager.GetPathStream(Observable.EveryUpdate().AsUnitObservable(), from, to, cancellationToken);
-                    break;
-                case PathfindingMode.EveryTimeStep:
-                    resultStream = pathfindingManager.GetPathStream(Observable.Interval(TimeSpan.FromSeconds(config.timeStep)).AsUnitObservable(), from, to, cancellationToken);
-                    break;
-                case PathfindingMode.Manual:
-                    resultStream = pathfindingManager.GetPathStream(config.waitSource, from, to, cancellationToken);
-                    break;
+                result[i] = ConvertToTerrainCell(path[i] as ICell, from.grid);
             }
+            return result;
+        }
+
+        public IObservable<StreamData> GetPathStream(ITerrainCell from, ITerrainCell to, CancellationToken cancellationToken = default)
+        {
+            int width = from.grid.width;
+            int height = from.grid.height;
+            var grid = new Grid(width, height);
+            IObservable<Unit> waitSource = pathfindingConfig.waitSource;
+            return pathfindingService.GetPathStream(
+                waitSource,
+                ConvertToNode(from, grid, to),
+                ConvertToNode(to, grid, to),
+                cancellationToken);
+        }
+
+        private ICell ConvertToNode(ITerrainCell cell, IGrid grid, ITerrainCell to)
+        {
+            return new Cell(cell.xCoordinate, cell.yCoordinate, cell.IsObstacle(), grid, to.xCoordinate, to.yCoordinate);
+        }
+        private ITerrainCell ConvertToTerrainCell(ICell node, ITerrainGrid grid)
+        {
+            return grid.GetCell(node.xCoordinate, node.yCoordinate);
         }
     }
 }
