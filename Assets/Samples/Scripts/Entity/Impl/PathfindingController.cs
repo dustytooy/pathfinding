@@ -4,27 +4,8 @@ using Dustytoy.DI;
 using Dustytoy.Pathfinding.Grid;
 using UniRx;
 
-namespace Dustytoy.Samples.Grid2D.Entity
+namespace Dustytoy.Samples.Grid2D.Entity.Impl
 {
-    internal interface IPathfindingController
-    {
-        public IPathfindingConfiguration pathfindingConfig { get; }
-        public IPathfindingService pathfindingService { get; }
-        public IPathfindingState pathfindingState { get; }
-        public IObstacleClicker obstacleClicker { get; }
-        public IStartEndClicker startEndClicker { get; }
-
-        public ITerrainCell start { get; }
-        public ITerrainCell end { get; }
-        public ITerrainCell[] path { get; }
-
-        public Action<StreamData> onNext { get; set; }
-        public Action<Exception> onError { get; set; }
-        public Action onComplete { get; set; }
-
-        public void Cancel();
-    }
-    
     internal class PathfindingController : IPathfindingController
     {
         [Inject]
@@ -34,9 +15,9 @@ namespace Dustytoy.Samples.Grid2D.Entity
         [Inject]
         public IPathfindingState pathfindingState { get; private set; }
         [Inject]
-        public IObstacleClicker obstacleClicker { get; private set; }
+        public ISelectorObstacle obstacleClicker { get; private set; }
         [Inject]
-        public IStartEndClicker startEndClicker { get; private set; }
+        public ISelectorStartEnd startEndClicker { get; private set; }
 
         public ITerrainCell start => startEndClicker.start;
         public ITerrainCell end => startEndClicker.end;
@@ -56,6 +37,7 @@ namespace Dustytoy.Samples.Grid2D.Entity
         public PathfindingController()
         {
             _disposables = new CompositeDisposable();
+            // Cancellation when resetting to select mode
             pathfindingState.onSelectObstaclesState.Subscribe(_ =>
             {
                 Cancel();
@@ -64,13 +46,10 @@ namespace Dustytoy.Samples.Grid2D.Entity
             {
                 Cancel();
             }).AddTo(_disposables);
+
+            // Running when state changed to running
             pathfindingState.onPathfindingState.Subscribe(_ =>
             {
-                if (start == null || end == null)
-                {
-                    // TODO: move can pathfind or not to usecase and remove this if guard
-                    return;
-                }
                 Run();
             }).AddTo(_disposables);
 
@@ -81,7 +60,7 @@ namespace Dustytoy.Samples.Grid2D.Entity
         ~PathfindingController()
         {
             _disposables.Dispose();
-            _cancellationTokenSource.Dispose();
+            _cancellationTokenSource?.Dispose();
             _path = null;
             _dataStream = null;
         }
@@ -89,7 +68,7 @@ namespace Dustytoy.Samples.Grid2D.Entity
         public void Run()
         {
             _cancellationTokenSource = new CancellationTokenSource();
-            // When using stream
+
             if(pathfindingConfig.pathfindingMode != PathfindingMode.Instant)
             {
                 _dataStream = GetPathStream(start, end, _cancellationTokenSource.Token);
@@ -106,6 +85,7 @@ namespace Dustytoy.Samples.Grid2D.Entity
             if(_cancellationTokenSource != null && _cancellationTokenSource.Token.CanBeCanceled)
             {
                 _cancellationTokenSource.Cancel();
+                _cancellationTokenSource.Dispose();
             }
         }
 
