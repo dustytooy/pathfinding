@@ -1,22 +1,25 @@
-﻿using System;
+﻿using UniRx;
+using System;
 
 namespace Dustytoy.Samples.Grid2D.Entity
 {
-    public enum State : int
+    public enum PathfindingState : int
     {
         SelectObstacles,
         SelectStartPosition,
         SelectEndPosition,
         Pathfinding,
+        Finished,
     }
 
     internal interface IPathfindingState
     {
-        public State state { get; set; }
-        public IObservable<State> onStateChanged { get; }
-        public IObservable<State> onSelectObstaclesState { get; }
-        public IObservable<State> onSelectStartPositionState { get; }
-        public IObservable<State> onSelectEndPosition { get; }
-        public IObservable<State> onPathfindingState { get; }
+        public PathfindingState state { get; set; }
+        public IObservable<PathfindingState> onStateChanged { get; }
+        public IObservable<Unit> onSelectObstaclesState { get; }
+        public IObservable<Unit> onSelectStartPositionState { get; }
+        public IObservable<Unit> onSelectEndPosition { get; }
+        public IObservable<Unit> onPathfindingState { get; }
+        public IObservable<Unit> onFinishedState { get; }
     }
 }
