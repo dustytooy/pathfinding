@@ -15,12 +15,12 @@ namespace Dustytoy.Samples.Grid2D.Entity.Impl
         [Inject]
         public IPathfindingState pathfindingState { get; private set; }
         [Inject]
-        public ISelectorObstacle obstacleClicker { get; private set; }
+        public ISelectorObstacle obstacleSelector { get; private set; }
         [Inject]
-        public ISelectorStartEnd startEndClicker { get; private set; }
+        public ISelectorStartEnd startEndSelector { get; private set; }
 
-        public ITerrainCell start => startEndClicker.start;
-        public ITerrainCell end => startEndClicker.end;
+        public ITerrainCell start => startEndSelector.start;
+        public ITerrainCell end => startEndSelector.end;
         public ITerrainCell[] path => _path;
 
         public Action<StreamData> onNext { get; set; }
@@ -53,30 +53,37 @@ namespace Dustytoy.Samples.Grid2D.Entity.Impl
                 Run();
             }).AddTo(_disposables);
 
-            // TODO: pathfinding state controlled in usecase
-            // TODO: cell clicker controlled in usecase
             // TODO: automated process relevant to state transition
         }
         ~PathfindingController()
         {
             _disposables.Dispose();
-            _cancellationTokenSource?.Dispose();
+            _cancellationTokenSource.Dispose();
             _path = null;
             _dataStream = null;
         }
 
         public void Run()
         {
-            _cancellationTokenSource = new CancellationTokenSource();
+            if(_cancellationTokenSource.IsCancellationRequested)
+            {
+                _cancellationTokenSource.Dispose();
+                _cancellationTokenSource = new CancellationTokenSource();
+            }
 
-            if(pathfindingConfig.pathfindingMode != PathfindingMode.Instant)
+            if (pathfindingConfig.pathfindingMode != PathfindingMode.Instant)
             {
                 _dataStream = GetPathStream(start, end, _cancellationTokenSource.Token);
-                _dataStream.Subscribe(onNext, onError, onComplete);
+                _dataStream.DoOnCompleted(()=>
+                {
+                    _path = GetPath(start, end, _cancellationTokenSource.Token);
+                    pathfindingState.state = Entity.PathfindingState.Finished;
+                }).Subscribe(onNext, onError, onComplete).AddTo(_disposables);
             }
             else
             {
                 _path = GetPath(start, end, _cancellationTokenSource.Token);
+                pathfindingState.state = Entity.PathfindingState.Finished;
             }
         }
 
@@ -85,7 +92,6 @@ namespace Dustytoy.Samples.Grid2D.Entity.Impl
             if(_cancellationTokenSource != null && _cancellationTokenSource.Token.CanBeCanceled)
             {
                 _cancellationTokenSource.Cancel();
-                _cancellationTokenSource.Dispose();
             }
         }
 

@@ -23,19 +23,28 @@ namespace Dustytoy.Samples.Grid2D.Entity.Impl
         {
             _disposables = new CompositeDisposable();
 
-            onStartSelected = selector.onDifferentSelected.Where(_ => !_.IsObstacle() && pathfindingState.state == State.SelectStartPosition);
-            onStartDeselected = selector.onSameSelected.Where(_ => _ == start && pathfindingState.state == State.SelectStartPosition);
-            onEndSelected = selector.onDifferentSelected.Where(_ => !_.IsObstacle() && pathfindingState.state == State.SelectEndPosition);
-            onEndDeselected = selector.onSameSelected.Where(_ => _ == end && pathfindingState.state == State.SelectEndPosition);
+            onStartSelected = selector.onDifferentSelected.Where(_ => !_.IsObstacle() && pathfindingState.state == Entity.PathfindingState.SelectStartPosition);
+            onStartDeselected = selector.onSameSelected.Where(_ => _ == start && pathfindingState.state == Entity.PathfindingState.SelectStartPosition);
+            onEndSelected = selector.onDifferentSelected.Where(_ => !_.IsObstacle() && pathfindingState.state == Entity.PathfindingState.SelectEndPosition);
+            onEndDeselected = selector.onSameSelected.Where(_ => _ == end && pathfindingState.state == Entity.PathfindingState.SelectEndPosition);
 
             onStartSelected.Subscribe(_ => start = _).AddTo(_disposables);
             onStartDeselected.Subscribe(_ => start = null).AddTo(_disposables);
             onEndSelected.Subscribe(_ => end = _).AddTo(_disposables);
             onEndDeselected.Subscribe(_ => end = null).AddTo(_disposables);
+
+            pathfindingState.onSelectObstaclesState.Subscribe(_ => ResetStartEnd()).AddTo(_disposables);
+            pathfindingState.onSelectStartPositionState.Subscribe(_ => ResetStartEnd()).AddTo(_disposables);
         }
         ~SelectorStartEnd()
         {
             _disposables.Dispose();
+        }
+
+        private void ResetStartEnd()
+        {
+            start = null;
+            end = null;
         }
     }
 }

@@ -19,8 +19,8 @@ namespace Dustytoy.Samples.Grid2D.Entity.Impl
         {
             _disposables = new CompositeDisposable();
 
-            onObstacleSelected = selector.onSelected.Where(_ => _.IsObstacle() && pathfindingState.state == State.SelectObstacles);
-            onObstacleDeselected = selector.onSelected.Where(_ => !_.IsObstacle() && pathfindingState.state == State.SelectObstacles);
+            onObstacleSelected = selector.onSelected.Where(_ => _.IsObstacle() && pathfindingState.state == Entity.PathfindingState.SelectObstacles);
+            onObstacleDeselected = selector.onSelected.Where(_ => !_.IsObstacle() && pathfindingState.state == Entity.PathfindingState.SelectObstacles);
 
             onObstacleSelected.Subscribe(_ => _.terrainProperties = new TerrainProperties(TerrainProperties.Type.None)).AddTo(_disposables);
             onObstacleDeselected.Subscribe(_ => _.terrainProperties = new TerrainProperties(TerrainProperties.Type.Obstacle)).AddTo(_disposables);
