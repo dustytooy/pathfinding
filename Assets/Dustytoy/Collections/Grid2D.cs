@@ -31,7 +31,14 @@
         {
             if (IsValidPosition(x, y))
                 return array[ToIndex(x, y)];
-            return default;
+            throw new System.IndexOutOfRangeException("Position is not valid");
+        }
+
+        public virtual void SetCell(int x, int y, T value)
+        {
+            if (IsValidPosition(x, y))
+                array[ToIndex(x, y)] = value;
+            throw new System.IndexOutOfRangeException("Position is not valid");
         }
 
         public virtual int ToIndex(int x, int y)
